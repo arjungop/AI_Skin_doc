@@ -1,0 +1,27 @@
+:root{--bg:#0f172a;--panel:#111827;--text:#e5e7eb;--muted:#9ca3af;--accent:#2563eb;--accent2:#7c3aed;--border:#1f2937}
+*{box-sizing:border-box}html,body,#root{height:100%}body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+.navbar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 18px;background:#0b1220;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
+.brand{font-weight:800;letter-spacing:.3px}
+.links{display:flex;gap:12px;flex-wrap:wrap}
+.navlink{color:var(--text);text-decoration:none;opacity:.9;padding:8px 10px;border-radius:8px}
+.navlink.active,.navlink:hover{opacity:1;background:#0f1a33}
+.container{max-width:1080px;margin:24px auto;padding:0 16px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.15) inset}
+.card-link{text-decoration:none;color:inherit;display:flex;flex-direction:column;min-height:160px}
+.grid-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
+.stack{display:flex;flex-direction:column;gap:12px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.row{display:flex;gap:12px}
+.spacer{flex:1}
+.muted{color:var(--muted)}
+.hint{color:#f59e0b}
+.button,button{display:inline-block;background:linear-gradient(90deg,var(--accent),var(--accent2));color:#fff;border:none;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:700}
+.button:hover,button:hover{filter:brightness(1.1)}
+input,select,textarea{background:#0b1220;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px 12px;width:100%}
+table{width:100%;border-collapse:collapse;background:var(--panel);border-radius:12px;overflow:hidden}
+thead{background:#0b1220}th,td{padding:12px;border-bottom:1px solid var(--border);text-align:left}
+.auth{max-width:420px;margin:48px auto}
+.chatbox{min-height:240px}
+.bubble{padding:10px 12px;border-radius:12px;margin:8px 0;background:#0b1220;border:1px solid var(--border)}
+.bubble.me{background:#0f1a33;border-color:#223355}
+.pre{white-space:pre-wrap}

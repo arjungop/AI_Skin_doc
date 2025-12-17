@@ -1,0 +1,1 @@
+{"class_to_idx": {"benign": 0, "malignant": 1}, "malignant_index": 1, "suggested_threshold": 0.75}
