@@ -1,5 +1,7 @@
 import os
 from typing import Tuple
+
+import torch
 from torchvision import datasets, transforms
 
 

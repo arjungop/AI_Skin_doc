@@ -11,7 +11,7 @@ set -euo pipefail
 #     --weights backend/ml/weights/skin_resnet50.pth \
 #     --threshold 0.45
 
-DATA_DIR="dataset/melanoma_cancer_dataset"
+DATA_DIR="data/lesions_binary"
 BACKBONE="resnet18"
 EPOCHS=12
 BATCH=32
