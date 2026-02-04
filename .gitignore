@@ -107,3 +107,8 @@ data/
 
 # Reports
 reports/current/
+datasets/
+data/
+*.jpg
+*.jpeg
+*.png
