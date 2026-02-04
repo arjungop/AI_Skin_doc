@@ -25,6 +25,10 @@ from backend.routes.chat import router as chat_router
 from backend.routes.ai_chat import router as ai_chat_router
 from backend.routes.support import router as support_router
 from backend.routes.notifications import router as notifications_router
+from backend.routes.profile import router as profile_router
+from backend.routes.journey import router as journey_router
+from backend.routes.routine import router as routine_router
+from backend.routes.recommendations import router as recommendations_router
 
 # Create tables and run lightweight migrations for dev
 models.Base.metadata.create_all(bind=engine)
@@ -139,6 +143,19 @@ app.include_router(chat_router, prefix="/chat", tags=["chat"])
 app.include_router(ai_chat_router, prefix="/ai_chat", tags=["ai_chat"])
 app.include_router(support_router, tags=["support"])
 app.include_router(notifications_router, tags=["notifications"])
+app.include_router(recommendations_router, prefix="/recommendations", tags=["recommendations"])
+
+app.include_router(profile_router, prefix="/profile", tags=["profile"])
+app.include_router(journey_router, prefix="/journey", tags=["journey"])
+app.include_router(routine_router, prefix="/routine", tags=["routine"])
+
+# Root redirect to frontend
+from fastapi.responses import RedirectResponse
+
+@app.get("/")
+def root():
+    """Redirect root to frontend"""
+    return RedirectResponse(url="http://localhost:3000")
 
 # Serve built frontend if present (single-port mode)
 try:

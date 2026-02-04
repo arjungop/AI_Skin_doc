@@ -1,0 +1,1 @@
+{"class_to_idx": {"benign": 0, "malignant": 1}, "malignant_index": 1, "backbone": "efficientnet_b4"}

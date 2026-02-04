@@ -1,43 +1,161 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@layer components {
-  .btn { @apply inline-flex items-center justify-center rounded-lg font-medium transition; }
-  .btn-sm { @apply px-3 py-1.5 text-sm; }
-  .btn-lg { @apply px-5 py-2.5; }
-  .btn-primary { @apply btn px-4 py-2 text-white bg-gradient-to-tr from-primaryBlue to-accentPurple2 hover:opacity-90; }
-  .btn-secondary { @apply btn px-4 py-2 text-white bg-gradient-to-tr from-secondary to-primary hover:opacity-90; }
-  .btn-ghost { @apply btn px-3 py-2 text-textDark dark:text-slate-100 border border-borderGray dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800; }
-  .gradient-innovation { @apply bg-gradient-to-br from-primary to-secondary; }
-  .gradient-calm { @apply bg-gradient-to-br from-background to-azure100; }
-
-  /* Light theme replacements for legacy classes */
-  .container { @apply max-w-7xl mx-auto px-6; }
-  .card { @apply bg-cardBackground dark:bg-slate-800 border border-borderElegant dark:border-slate-600 rounded-2xl shadow-sm p-5; }
-  .card-link { @apply no-underline text-textDark dark:text-slate-200; }
-  .grid-cards { @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6; }
-  .stack { @apply flex flex-col gap-3; }
-  .row { @apply flex gap-3 items-center; }
-  .muted { @apply text-textMuted dark:text-slate-400; }
-  .button { @apply btn-primary; }
-  .chip { @apply inline-block px-3 py-1.5 rounded-full bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-100; }
-  .chatbox { @apply min-h-[240px] bg-white dark:bg-backgroundDark border border-borderGray dark:border-slate-700 rounded-2xl p-4; }
-  .bubble { @apply p-3 rounded-xl border border-borderGray dark:border-slate-700 bg-white dark:bg-slate-800 text-textDark dark:text-slate-100; }
-  .bubble.me { @apply bg-slate-50 dark:bg-slate-700; }
-  .pre { @apply whitespace-pre-wrap; }
-  .auth { @apply max-w-md mx-auto mt-12; }
+:root {
+  /* Clinical Futurism Variables */
+  --color-surface: #FAFAFA;
+  --color-surface-highlight: #FFFFFF;
+  --color-text-primary: #121212;
+  --color-text-secondary: #686868;
+  --color-accent-medical: #0F766E;
+  --color-accent-ai: #2563EB;
 }
 
+/* Subtle Noise Texture for Bio-Digital Feel */
 @layer base {
-  table { @apply w-full border-collapse bg-cardBackground dark:bg-slate-900 rounded-2xl overflow-hidden; }
-  thead { @apply bg-backgroundSecondary dark:bg-slate-800; }
-  th, td { @apply p-3 border-b border-borderElegant dark:border-slate-700 text-left; }
-  input, select, textarea { @apply bg-white dark:bg-slate-800 border border-borderElegant dark:border-slate-700 rounded-lg px-3 py-2 text-textDark dark:text-slate-100 w-full; }
+  body {
+    @apply bg-surface text-text-primary font-sans antialiased;
+    background-image: 
+      radial-gradient(circle at 25% 25%, rgba(15, 118, 110, 0.02) 0%, transparent 50%),
+      radial-gradient(circle at 75% 75%, rgba(37, 99, 235, 0.02) 0%, transparent 50%),
+      url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.015'/%3E%3C/svg%3E");
+    background-attachment: fixed;
+  }
+  
+  /* Enforce tight tracking on all text */
+  h1, h2, h3, h4, h5, h6 {
+    @apply tracking-tighter font-semibold;
+  }
+  
+  /* All numbers and data should be monospace */
+  .data-display {
+    @apply font-mono text-text-mono tracking-tight;
+  }
 }
 
 @layer components {
-  .skeleton { @apply animate-pulse rounded-lg bg-slate-200 dark:bg-slate-700; }
-  .gradient-lux-banner { @apply bg-gradient-to-tr from-cardBackground to-backgroundSecondary; }
-  .gold-glow { background: radial-gradient(circle at 30% 30%, rgba(198,166,100,0.2), transparent 70%); }
+
+  /* CERAMIC CARD SYSTEM */
+  .card-ceramic {
+    @apply bg-surface-highlight border border-[rgba(0,0,0,0.04)] shadow-glass rounded-ceramic;
+    @apply transition-all duration-300 hover:shadow-float;
+  }
+  
+  .card-glass {
+    @apply bg-white/50 backdrop-blur-2xl border border-white/20 shadow-glass rounded-ceramic;
+    @apply transition-all duration-300 hover:bg-white/60;
+  }
+  
+  .card-ghost {
+    @apply bg-transparent border border-transparent rounded-ceramic;
+    @apply transition-all duration-300 hover:bg-white/20 hover:backdrop-blur-xl;
+  }
+
+  /* BUTTON SYSTEM - Pill Shapes */
+  .btn {
+    @apply inline-flex items-center justify-center rounded-full font-medium transition-all duration-200;
+    @apply active:scale-95 tracking-tight;
+  }
+
+  .btn-primary {
+    @apply btn px-8 py-4 text-white bg-accent-medical hover:bg-medical-600 shadow-float;
+  }
+  
+  .btn-ai {
+    @apply btn px-8 py-4 text-white bg-accent-ai hover:bg-ai-600 shadow-float;
+  }
+
+  .btn-ghost {
+    @apply btn px-6 py-3 text-text-primary border border-border-subtle hover:border-text-primary;
+    @apply hover:bg-surface-highlight;
+  }
+  
+  .btn-sm {
+    @apply btn px-4 py-2 text-sm font-medium;
+  }
+
+  /* DOCK NAVIGATION */
+  .dock {
+    @apply fixed z-50 flex items-center gap-2 px-4 py-3;
+    @apply bg-white/70 backdrop-blur-2xl border border-white/20 rounded-full shadow-dock;
+  }
+  
+  .dock-icon {
+    @apply w-12 h-12 flex items-center justify-center rounded-full text-text-secondary;
+    @apply transition-all duration-200 hover:scale-110 hover:text-accent-medical;
+    @apply hover:bg-white/50;
+  }
+  
+  .dock-icon.active {
+    @apply text-accent-ai bg-ai-50 scale-105;
+  }
+
+  /* LAYOUT UTILITIES */
+  .container {
+    @apply max-w-7xl mx-auto px-6 py-8;
+  }
+  
+  /* BENTO GRID */
+  .bento-grid {
+    @apply grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3;
+  }
+  
+  .bento-large {
+    @apply md:col-span-2 lg:row-span-2;
+  }
+  
+  .bento-tall {
+    @apply lg:row-span-2;
+  }
+
+  /* LEGACY UTILITIES - For compatibility */
+  .grid-cards {
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6;
+  }
+
+  .row {
+    @apply flex gap-4 items-center;
+  }
+
+  .muted {
+    @apply text-text-secondary font-medium;
+  }
+
+  .button {
+    @apply btn-primary;
+  }
+
+  .chip {
+    @apply inline-block px-4 py-1.5 rounded-full bg-surface text-text-primary font-mono text-xs uppercase tracking-wider;
+  }
+
+  /* Chat specifics */
+  .chatbox {
+    @apply min-h-[400px] card-ceramic;
+  }
+
+  .bubble {
+    @apply p-4 rounded-2xl card-ceramic text-text-primary font-medium leading-relaxed;
+  }
+
+  .bubble.me {
+    @apply bg-accent-medical text-white border-transparent;
+  }
+
+  /* Auth Screens */
+  .auth {
+    @apply max-w-sm mx-auto mt-20 card-ceramic p-10;
+  }
+
+  /* Input Styles - Clinical Forms */
+  input,
+  select,
+  textarea {
+    @apply bg-surface border border-border-subtle rounded-2xl px-5 py-4 text-text-primary w-full;
+    @apply focus:ring-0 focus:border-accent-medical outline-none transition-colors;
+    @apply font-medium placeholder:text-text-secondary;
+  }
 }

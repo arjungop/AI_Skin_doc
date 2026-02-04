@@ -1,55 +1,70 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  darkMode: 'class',
   content: [
-    './index.html',
-    './src/**/*.{js,jsx,ts,tsx}',
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
   ],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        // Legacy dark tokens (still used by older pages)
-        bg: '#0f172a',
-        panel: '#111827',
-        text: '#e5e7eb',
-        muted: '#9ca3af',
-        accent2: '#7c3aed',
-        border: '#1f2937',
-
-        // New Azure-themed palette
-        primary: '#0078D4',      // Azure Blue
-        accent: '#6B5BFF',       // Accent Purple
-        coral: '#FF6B6B',        // Alert accent
-        secondary: '#00B2A9',    // Teal
-        teal: '#00B2A9',
-        background: '#F9FAFB',   // Light background
-        backgroundDark: '#1F2937',
-        card: '#FFFFFF',
-        textDark: '#1E293B',     // Slate 800
-        textMuted: '#64748B',    // Slate 500
-        textPrimary: '#1E293B',
-        textSecondary: '#64748B',
-        coolGray: '#6B7280',     // Neutral label
-        warmGray: '#D1D5DB',     // Neutral border/muted
-        borderGray: '#E2E8F0',
-        borderLight: '#E5E7EB',
-        error: '#DC2626',
-        warning: '#F59E0B',
-        success: '#10B981',
-        azure100: '#E0F2FE',
-        // Luxury palette
-        backgroundSoft: '#F3F2F7',
-        backgroundSecondary: '#E8E6EF',
-        cardBackground: '#F7F6FB',
-        accentGold: '#C6A664',
-        primaryBlue: '#4E73DF',
-        accentPurple2: '#6A5BFF',
-        textLuxury: '#2C2E33',
-        textLuxuryMuted: '#5F6368',
-        borderElegant: '#D5D8DE',
-        successLux: '#2FAE7B',
-        warningLux: '#E9A44F',
-        errorLux: '#D64550',
+        // CLINICAL FUTURISM - Ceramic Color System
+        surface: '#FAFAFA',        // Ceramic White - Base background
+        'surface-highlight': '#FFFFFF',  // Pure white for elevated cards
+        
+        // Text Hierarchy
+        'text-primary': '#121212',    // Soft high-contrast black
+        'text-secondary': '#686868',  // Graphite gray for labels
+        'text-mono': '#454545',       // For data/numbers
+        
+        // Functional Accents
+        'accent-medical': '#0F766E',  // Surgical Teal - Medical features
+        'accent-ai': '#2563EB',       // Electric Blue - AI/Scanning
+        
+        // Border System
+        'border-subtle': 'rgba(0,0,0,0.04)',  // Ultra-faint borders
+        'border-glass': 'rgba(255,255,255,0.2)', // Glass highlights
+        
+        // Extended Palette for Compatibility
+        medical: {
+          50: '#f0fdfa',
+          100: '#ccfbf1',
+          500: '#0F766E',
+          600: '#0d9488',
+          700: '#0f766e',
+          800: '#115e59',
+          900: '#134e4a',
+        },
+        ai: {
+          50: '#eff6ff',
+          100: '#dbeafe',
+          500: '#2563EB',
+          600: '#3b82f6',
+          700: '#1d4ed8',
+          800: '#1e40af',
+          900: '#1e3a8a',
+        },
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+      },
+      letterSpacing: {
+        tighter: '-0.025em',  // Technical feel
+        tight: '-0.015em',
+      },
+      boxShadow: {
+        // Ambient Occlusion Shadows
+        'glass': '0 0 0 1px rgba(0,0,0,0.03), 0 2px 8px rgba(0,0,0,0.04)',
+        'float': '0 12px 24px -8px rgba(0,0,0,0.08), 0 4px 8px -4px rgba(0,0,0,0.04)',
+        'dock': '0 8px 32px -4px rgba(0,0,0,0.12), 0 0 0 1px rgba(255,255,255,0.1)',
+      },
+      backdropBlur: {
+        'xs': '2px',
+        '2xl': '24px',
+      },
+      borderRadius: {
+        'ceramic': '24px',  // Smooth organic curves
       },
     },
   },

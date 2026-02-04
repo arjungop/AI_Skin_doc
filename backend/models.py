@@ -281,8 +281,86 @@ class SupportTicket(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+
 class NewsletterSubscriber(Base):
     __tablename__ = "newsletter_subscribers"
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(150), nullable=False, unique=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# --- Personalization Engine Tables ---
+
+class UserProfile(Base):
+    __tablename__ = "user_profiles"
+    profile_id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False, unique=True)
+    
+    # Skin attributes
+    skin_type = Column(String(20)) # Dry, Oily, Combination, Normal
+    sensitivity_level = Column(String(20)) # Low, Medium, High
+    acne_prone = Column(Boolean, default=False)
+    fitzpatrick_type = Column(Integer) # 1-6
+    
+    # Context
+    allergies = Column(Text) # JSON list or comma-separated
+    goals = Column(Text) # JSON list: Anti-aging, Hydration, etc.
+    location_city = Column(String(100)) # For weather lookup
+    
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    user = relationship("User")
+
+class Product(Base):
+    __tablename__ = "products"
+    product_id = Column(Integer, primary_key=True, index=True)
+    external_id = Column(String(100), unique=True, index=True) # e.g. barcode
+    
+    name = Column(String(255), index=True)
+    brand = Column(String(100), index=True)
+    categories = Column(Text) # JSON
+    image_url = Column(String(500))
+    ingredients_text = Column(Text)
+    
+    # Embedding is binary (BLOB) for vector search
+    embedding = Column(Text) # Storing as base64 or heavy binary if DB supports
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+# --- Skin Journey & Routine Tracker Models ---
+
+class SkinLog(Base):
+    __tablename__ = "skin_logs"
+    log_id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    image_path = Column(Text, nullable=True) # Base64 image data or path
+    notes = Column(Text, nullable=True)
+    tags = Column(String(255), nullable=True) # JSON list of tags (e.g. ["acne", "redness"])
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    user = relationship("User")
+
+class RoutineItem(Base):
+    __tablename__ = "routine_items"
+    item_id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    product_name = Column(String(255), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.product_id"), nullable=True) # Optional link to specific product
+    time_of_day = Column(String(20), nullable=False) # "AM", "PM", "BOTH"
+    step_order = Column(Integer, default=1)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    user = relationship("User")
+    product = relationship("Product")
+    completions = relationship("RoutineCompletion", back_populates="routine_item")
+
+class RoutineCompletion(Base):
+    __tablename__ = "routine_completions"
+    completion_id = Column(Integer, primary_key=True, index=True)
+    routine_item_id = Column(Integer, ForeignKey("routine_items.item_id"), nullable=False)
+    date = Column(DateTime, nullable=False) # Store as date content (YYYY-MM-DD or datetime)
+    status = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    routine_item = relationship("RoutineItem", back_populates="completions")

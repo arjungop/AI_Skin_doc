@@ -1,0 +1,44 @@
+# Files to exclude when pushing to server
+# Use with: rsync --exclude-from='.serverignore' ...
+
+# Large dataset directories (download on server instead)
+datasets/
+data/unified_train/
+data/unified_val/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Checkpoints (will be generated on server)
+checkpoints/
+*.pth
+*.pt
+
+# Logs
+*.log
+logs/
+runs/
+
+# Node (if any frontend)
+node_modules/
+frontend-react/node_modules/

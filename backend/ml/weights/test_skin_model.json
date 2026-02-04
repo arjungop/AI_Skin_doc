@@ -1,0 +1,1 @@
+{"classes": ["ak", "angioma", "bcc", "candida", "eczema", "herpes", "hyperpigmentation", "impetigo", "lichen_planus", "melanoma", "melasma", "nevus", "psoriasis", "scabies", "scc", "seborrheic_keratosis", "urticaria", "vitiligo", "wart"], "val_acc": 56.7436601518333, "epoch": 1, "backbone": "resnet18"}

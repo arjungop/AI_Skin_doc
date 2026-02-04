@@ -3,7 +3,7 @@ import { api } from '../services/api'
 
 const MessageStatus = {
   SENT: 'sent',
-  DELIVERED: 'delivered', 
+  DELIVERED: 'delivered',
   READ: 'read'
 }
 
@@ -31,6 +31,9 @@ export default function Messages() {
   const [availableUsers, setAvailableUsers] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
   const [isLoadingUsers, setIsLoadingUsers] = useState(false)
+  const [showNotesModal, setShowNotesModal] = useState(false)
+  const [generatedNotes, setGeneratedNotes] = useState('')
+  const [isGeneratingNotes, setIsGeneratingNotes] = useState(false)
 
   const wsRef = useRef(null)
   const messagesEndRef = useRef(null)
@@ -102,7 +105,7 @@ export default function Messages() {
     try {
       setIsLoadingUsers(true)
       const currentRole = localStorage.getItem('role')?.toUpperCase()
-      
+
       if (currentRole === 'PATIENT') {
         // Patients can message doctors
         const doctors = await api.listDoctors()
@@ -134,29 +137,29 @@ export default function Messages() {
       const currentRole = localStorage.getItem('role')?.toUpperCase()
       const currentPatientId = localStorage.getItem('patient_id')
       const currentDoctorId = localStorage.getItem('doctor_id')
-      
+
       let roomData = {}
-      
+
       if (currentRole === 'PATIENT' && targetUser.type === 'doctor') {
         if (!currentPatientId) {
           throw new Error('Patient ID not found. Please log in again.')
         }
-        roomData = { 
+        roomData = {
           patient_id: parseInt(currentPatientId),
-          doctor_id: targetUser.doctor_id 
+          doctor_id: targetUser.doctor_id
         }
       } else if (currentRole === 'DOCTOR' && targetUser.type === 'patient') {
         if (!currentDoctorId) {
           throw new Error('Doctor ID not found. Please log in again.')
         }
-        roomData = { 
+        roomData = {
           patient_id: targetUser.patient_id,
           doctor_id: parseInt(currentDoctorId)
         }
       } else {
         throw new Error('Invalid conversation participants')
       }
-      
+
       console.log('Creating room with data:', roomData) // Debug log
       const newRoom = await api.createRoom(roomData)
       await loadRooms() // Refresh the rooms list
@@ -189,13 +192,13 @@ export default function Messages() {
     try {
       const response = await api.listMessages(roomId, pageNum, 50)
       const newMessages = response.messages || []
-      
+
       if (append) {
         setMessages(prev => [...newMessages, ...prev])
       } else {
         setMessages(newMessages)
       }
-      
+
       setHasMoreMessages(newMessages.length === 50)
       setPage(pageNum)
     } catch (err) {
@@ -216,9 +219,9 @@ export default function Messages() {
 
     const token = localStorage.getItem('access_token')
     const wsUrl = `${api.base.replace('http', 'ws')}/chat/ws?room_id=${roomId}&token=${encodeURIComponent(token || '')}`
-    
+
     const ws = new WebSocket(wsUrl)
-    
+
     ws.onopen = () => {
       console.log('WebSocket connected')
       setError('')
@@ -257,12 +260,12 @@ export default function Messages() {
         setMessages(prev => [...prev, data.data])
         break
       case 'message_updated':
-        setMessages(prev => prev.map(msg => 
+        setMessages(prev => prev.map(msg =>
           msg.message_id === data.data.message_id ? data.data : msg
         ))
         break
       case 'reaction_updated':
-        setMessages(prev => prev.map(msg => 
+        setMessages(prev => prev.map(msg =>
           msg.message_id === data.data.message_id ? data.data : msg
         ))
         break
@@ -290,7 +293,7 @@ export default function Messages() {
 
   const sendMessage = async (e) => {
     e.preventDefault()
-    
+
     const content = messageText.trim()
     if (!content || !activeRoom) return
 
@@ -306,7 +309,7 @@ export default function Messages() {
       } else {
         await api.postMessage(activeRoom.room_id, messageData)
       }
-      
+
       setMessageText('')
       setReplyToMessage(null)
     } catch (err) {
@@ -322,15 +325,15 @@ export default function Messages() {
 
   const handleTextChange = (e) => {
     setMessageText(e.target.value)
-    
+
     // Send typing indicator
     sendTypingIndicator(true)
-    
+
     // Clear previous timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current)
     }
-    
+
     // Set new timeout to stop typing indicator
     typingTimeoutRef.current = setTimeout(() => {
       sendTypingIndicator(false)
@@ -342,7 +345,7 @@ export default function Messages() {
 
     try {
       const uploadResult = await api.uploadChatFile(activeRoom.room_id, file)
-      
+
       const messageData = {
         content: file.name,
         message_type: uploadResult.message_type,
@@ -404,17 +407,17 @@ export default function Messages() {
 
   const getParticipantName = (room) => {
     if (!room) return 'Unknown'
-    
+
     // If current user is patient, show doctor name
     // If current user is doctor, show patient name
     const currentUserRole = localStorage.getItem('role')?.toLowerCase()
-    
+
     if (currentUserRole === 'patient' && room.doctor) {
       return `Dr. ${room.doctor.username}`
     } else if (currentUserRole === 'doctor' && room.patient) {
       return `${room.patient.first_name} ${room.patient.last_name}`
     }
-    
+
     return `Room #${room.room_id}`
   }
 
@@ -430,7 +433,23 @@ export default function Messages() {
 
   const typingUsersList = Object.values(typingUsers).filter(Boolean)
 
+
+
   const commonEmojis = ['👍', '❤️', '😂', '😮', '😢', '😡', '👏', '🔥']
+
+  const handleGenerateNotes = async () => {
+    if (!activeRoom) return
+    setIsGeneratingNotes(true)
+    try {
+      const res = await api.generateClinicalNotes(activeRoom.room_id)
+      setGeneratedNotes(res.notes)
+      setShowNotesModal(true)
+    } catch (err) {
+      alert('Failed to generate notes: ' + err.message)
+    } finally {
+      setIsGeneratingNotes(false)
+    }
+  }
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -440,7 +459,7 @@ export default function Messages() {
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-semibold text-gray-900">Messages</h1>
             <div className="flex items-center space-x-2">
-              <button 
+              <button
                 onClick={() => {
                   setShowNewConversation(true)
                   loadAvailableUsers()
@@ -452,7 +471,7 @@ export default function Messages() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
               </button>
-              <button 
+              <button
                 onClick={loadRooms}
                 className="p-2 text-gray-500 hover:text-gray-700 rounded-md hover:bg-gray-100"
                 title="Refresh conversations"
@@ -475,23 +494,21 @@ export default function Messages() {
               {rooms.map(room => {
                 const unreadCount = getUnreadCount(room)
                 const isActive = activeRoom?.room_id === room.room_id
-                
+
                 return (
                   <div
                     key={room.room_id}
                     onClick={() => openRoom(room)}
-                    className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                      isActive 
-                        ? 'bg-blue-50 border border-blue-200' 
-                        : 'hover:bg-gray-50 border border-transparent'
-                    }`}
+                    className={`p-3 rounded-lg cursor-pointer transition-colors ${isActive
+                      ? 'bg-blue-50 border border-blue-200'
+                      : 'hover:bg-gray-50 border border-transparent'
+                      }`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center space-x-2">
-                          <h3 className={`font-medium truncate ${
-                            unreadCount > 0 ? 'text-gray-900' : 'text-gray-700'
-                          }`}>
+                          <h3 className={`font-medium truncate ${unreadCount > 0 ? 'text-gray-900' : 'text-gray-700'
+                            }`}>
                             {getParticipantName(room)}
                           </h3>
                           {unreadCount > 0 && (
@@ -531,7 +548,7 @@ export default function Messages() {
                   </h2>
                   <div className="flex items-center space-x-4 mt-1">
                     <p className="text-sm text-gray-500">
-                      {activeRoom.patient && activeRoom.doctor && 
+                      {activeRoom.patient && activeRoom.doctor &&
                         `Patient: ${activeRoom.patient.first_name} ${activeRoom.patient.last_name} • Doctor: Dr. ${activeRoom.doctor.username}`
                       }
                     </p>
@@ -542,11 +559,27 @@ export default function Messages() {
                     )}
                   </div>
                 </div>
+                <div className="flex items-center gap-3">
+                  {localStorage.getItem('role') === 'DOCTOR' && (
+                    <button
+                      onClick={handleGenerateNotes}
+                      disabled={isGeneratingNotes}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors text-sm font-medium disabled:opacity-50"
+                    >
+                      {isGeneratingNotes ? (
+                        <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                      )}
+                      <span>{isGeneratingNotes ? 'Generating...' : 'Clinical Notes'}</span>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
             {/* Messages Area */}
-            <div 
+            <div
               ref={messagesContainerRef}
               className="flex-1 overflow-y-auto p-4 space-y-4"
               onScroll={(e) => {
@@ -582,18 +615,16 @@ export default function Messages() {
                           {message.sender?.username || 'Unknown'}
                         </p>
                       )}
-                      
+
                       <div
-                        className={`relative group rounded-lg px-3 py-2 ${
-                          isOwnMessage
-                            ? 'bg-blue-500 text-white'
-                            : 'bg-white border border-gray-200 text-gray-900'
-                        } ${message.is_deleted ? 'opacity-50 italic' : ''}`}
+                        className={`relative group rounded-lg px-3 py-2 ${isOwnMessage
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-white border border-gray-200 text-gray-900'
+                          } ${message.is_deleted ? 'opacity-50 italic' : ''}`}
                       >
                         {message.reply_to && (
-                          <div className={`text-xs p-2 rounded mb-2 ${
-                            isOwnMessage ? 'bg-blue-400' : 'bg-gray-100'
-                          }`}>
+                          <div className={`text-xs p-2 rounded mb-2 ${isOwnMessage ? 'bg-blue-400' : 'bg-gray-100'
+                            }`}>
                             <p className="font-medium">Replying to {message.reply_to.sender?.username}</p>
                             <p className="truncate">{message.reply_to.content}</p>
                           </div>
@@ -655,14 +686,13 @@ export default function Messages() {
                             {formatTime(message.created_at)}
                             {message.is_edited && ' (edited)'}
                           </p>
-                          
+
                           {isOwnMessage && (
-                            <span className={`text-xs ${
-                              message.status === 'read' ? 'text-green-200' :
+                            <span className={`text-xs ${message.status === 'read' ? 'text-green-200' :
                               message.status === 'delivered' ? 'text-blue-200' : 'text-gray-300'
-                            }`}>
-                              {message.status === 'read' ? '✓✓' : 
-                               message.status === 'delivered' ? '✓' : '○'}
+                              }`}>
+                              {message.status === 'read' ? '✓✓' :
+                                message.status === 'delivered' ? '✓' : '○'}
                             </span>
                           )}
                         </div>
@@ -678,7 +708,7 @@ export default function Messages() {
                               <path fillRule="evenodd" d="M7.707 3.293a1 1 0 010 1.414L5.414 7H11a7 7 0 017 7v2a1 1 0 11-2 0v-2a5 5 0 00-5-5H5.414l2.293 2.293a1 1 0 11-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
                             </svg>
                           </button>
-                          
+
                           <button
                             onClick={() => setShowEmojiPicker(message.message_id)}
                             className="p-1 bg-gray-500 text-white rounded-full hover:bg-gray-600"
@@ -700,7 +730,7 @@ export default function Messages() {
                                   <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
                                 </svg>
                               </button>
-                              
+
                               <button
                                 onClick={() => deleteMessage(message.message_id)}
                                 className="p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
@@ -782,7 +812,7 @@ export default function Messages() {
                   className="hidden"
                   accept="image/*,.pdf,.doc,.docx,.txt"
                 />
-                
+
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -851,7 +881,7 @@ export default function Messages() {
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md m-4">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900">Start New Conversation</h2>
-              <button 
+              <button
                 onClick={() => setShowNewConversation(false)}
                 className="p-2 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100"
               >
@@ -860,7 +890,7 @@ export default function Messages() {
                 </svg>
               </button>
             </div>
-            
+
             <div className="p-4">
               <div className="mb-4">
                 <input
@@ -871,14 +901,14 @@ export default function Messages() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
-              
+
               <div className="max-h-64 overflow-y-auto">
                 {isLoadingUsers ? (
                   <div className="p-4 text-center text-gray-500">Loading users...</div>
                 ) : (
                   availableUsers
-                    .filter(user => 
-                      searchQuery === '' || 
+                    .filter(user =>
+                      searchQuery === '' ||
                       user.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                       user.subtitle.toLowerCase().includes(searchQuery.toLowerCase())
                     )
@@ -889,9 +919,8 @@ export default function Messages() {
                         className="p-3 rounded-lg border border-gray-200 mb-2 cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition-colors"
                       >
                         <div className="flex items-center space-x-3">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white ${
-                            user.type === 'doctor' ? 'bg-blue-500' : 'bg-green-500'
-                          }`}>
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white ${user.type === 'doctor' ? 'bg-blue-500' : 'bg-green-500'
+                            }`}>
                             {user.type === 'doctor' ? '👨‍⚕️' : '👤'}
                           </div>
                           <div className="flex-1">
@@ -902,11 +931,11 @@ export default function Messages() {
                       </div>
                     ))
                 )}
-                
+
                 {!isLoadingUsers && availableUsers.length === 0 && (
                   <div className="p-4 text-center text-gray-500">
-                    {localStorage.getItem('role')?.toUpperCase() === 'PATIENT' 
-                      ? 'No doctors available' 
+                    {localStorage.getItem('role')?.toUpperCase() === 'PATIENT'
+                      ? 'No doctors available'
                       : 'No patients available'
                     }
                   </div>
@@ -916,6 +945,31 @@ export default function Messages() {
           </div>
         </div>
       )}
+
+      {showNotesModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
+            <div className="p-6 border-b flex items-center justify-between">
+              <h3 className="text-xl font-serif font-bold text-slate-900">Clinical SOAP Notes</h3>
+              <button onClick={() => setShowNotesModal(false)} className="text-slate-400 hover:text-slate-600">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto bg-slate-50 font-mono text-sm leading-relaxed whitespace-pre-wrap">
+              {generatedNotes}
+            </div>
+            <div className="p-4 border-t bg-white rounded-b-2xl flex justify-end gap-3">
+              <button
+                onClick={() => { navigator.clipboard.writeText(generatedNotes); alert('Copied!') }}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium transition-all"
+              >
+                Copy to Clipboard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
+

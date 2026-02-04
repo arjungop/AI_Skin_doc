@@ -259,3 +259,63 @@ class LesionWithReviewOut(BaseModel):
     prediction: str | None = None
     created_at: datetime
     latest_review: dict | None = None
+
+# User Profile (Personalization)
+class UserProfileBase(BaseModel):
+    skin_type: Optional[str] = None
+    sensitivity_level: Optional[str] = None
+    acne_prone: bool = False
+    fitzpatrick_type: Optional[int] = None
+    allergies: Optional[str] = None # JSON or comma-separated
+    goals: Optional[str] = None # JSON
+    location_city: Optional[str] = None
+
+class UserProfileCreate(UserProfileBase):
+    pass
+
+class UserProfileUpdate(UserProfileBase):
+    pass
+
+class UserProfileOut(UserProfileBase):
+    profile_id: int
+    user_id: int
+    updated_at: datetime
+    model_config = {"from_attributes": True}
+
+# --- Skin Journey Models ---
+
+class SkinLogCreate(BaseModel):
+    image_path: Optional[str] = None
+    notes: Optional[str] = None
+    tags: Optional[str] = None
+
+class SkinLogOut(SkinLogCreate):
+    log_id: int
+    user_id: int
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+# --- Routine Models ---
+
+class RoutineItemCreate(BaseModel):
+    product_name: str
+    product_id: Optional[int] = None
+    time_of_day: str # AM, PM, BOTH
+    step_order: int = 1
+    is_active: bool = True
+
+class RoutineItemOut(RoutineItemCreate):
+    item_id: int
+    user_id: int
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+class RoutineCompletionCreate(BaseModel):
+    routine_item_id: int
+    date: datetime
+    status: bool = True
+
+class RoutineCompletionOut(RoutineCompletionCreate):
+    completion_id: int
+    created_at: datetime
+    model_config = {"from_attributes": True}

@@ -336,10 +336,22 @@ def stream_chat_reply(prompt: str, patient: Optional[Dict] = None, history: Opti
     }
     context_parts = []
     if patient:
-        context_parts.append(
-            f"Patient context: name={patient.get('first_name','') or ''} {patient.get('last_name','') or ''}, "
-            f"age={patient.get('age','?')}, gender={patient.get('gender','?')}"
-        )
+        base = f"Patient: name={patient.get('first_name','') or 'User'}, age={patient.get('age','?')}, gender={patient.get('gender','?')}"
+        if patient.get("skin_type"):
+            base += f", Skin Type={patient.get('skin_type')}"
+        if patient.get("sensitivity"):
+            base += f", Sensitivity={patient.get('sensitivity')}"
+        context_parts.append(base)
+        
+        if patient.get("concerns"):
+            context_parts.append(f"Patient Concerns: {patient.get('concerns')}")
+        if patient.get("goals"):
+            context_parts.append(f"Goals: {patient.get('goals')}")
+        if patient.get("allergies"):
+            context_parts.append(f"History/Context: {patient.get('allergies')}")
+        if patient.get("location"):
+            context_parts.append(f"Location: {patient.get('location')}")
+
     if context_parts:
         system["content"] += "\n" + "\n".join(context_parts)
     msgs: List[Dict[str, str]] = [system]
@@ -386,10 +398,22 @@ def chat_reply(prompt: str, patient: Optional[Dict] = None, history: Optional[Li
     }
     context_parts = []
     if patient:
-        context_parts.append(
-            f"Patient context: name={patient.get('first_name','') or ''} {patient.get('last_name','') or ''}, "
-            f"age={patient.get('age','?')}, gender={patient.get('gender','?')}"
-        )
+        base = f"Patient: name={patient.get('first_name','') or 'User'}, age={patient.get('age','?')}, gender={patient.get('gender','?')}"
+        if patient.get("skin_type"):
+            base += f", Skin Type={patient.get('skin_type')}"
+        if patient.get("sensitivity"):
+            base += f", Sensitivity={patient.get('sensitivity')}"
+        context_parts.append(base)
+        
+        if patient.get("concerns"):
+            context_parts.append(f"Patient Concerns: {patient.get('concerns')}")
+        if patient.get("goals"):
+            context_parts.append(f"Goals: {patient.get('goals')}")
+        if patient.get("allergies"):
+            context_parts.append(f"History/Context: {patient.get('allergies')}")
+        if patient.get("location"):
+            context_parts.append(f"Location: {patient.get('location')}")
+
     if context_parts:
         system["content"] += "\n" + "\n".join(context_parts)
 
@@ -450,3 +474,52 @@ def diagnosis_for_lesion(patient: Dict, lesion: Dict) -> str:
         "Warning signs: rapid growth, irregular borders, multiple colors, bleeding, or pain.\n"
         "Follow-up: please consult a dermatologist within 1–2 weeks, or sooner if symptoms worsen."
     )
+
+
+def generate_clinical_notes(patient: Dict, chat_history: List[Dict[str, str]]) -> str:
+    """Generate structured SOAP clinical notes from chat history."""
+    
+    # Format chat history for context
+    conversation_text = ""
+    for msg in chat_history:
+        role = "Doctor" if msg.get("role") == "assistant" else "Patient"
+        conversation_text += f"{role}: {msg.get('content')}\n"
+
+    system = {
+        "role": "system",
+        "content": (
+            "You are an expert AI medical scribe helping a doctor. "
+            "Your task is to analyze the provided conversation history and patient profile to generate a structured Clinical SOAP Note. "
+            "The note must be professional, concise, and clinically relevant. \n\n"
+            "Format your response EXACTLY as follows using Markdown headers:\n"
+            "## Subjective\n"
+            "- Patient complaints, history, symptoms, and relevant context\n"
+            "## Objective\n"
+            "- Observable details (if any mentioned, e.g. from images or description)\n"
+            "## Assessment\n"
+            "- Potential conditions discussed (use 'Suspected' or 'Differential', do not diagnose definitively)\n"
+            "## Plan\n"
+            "- Recommended next steps, treatments, or follow-ups mentioned\n"
+        ),
+    }
+
+    user_content = f"Patient Profile:\nName: {patient.get('first_name','')} {patient.get('last_name','')}\nAge: {patient.get('age','?')}, Gender: {patient.get('gender','?')}\n\n"
+    if patient.get("skin_type"): user_content += f"Skin Type: {patient.get('skin_type')}\n"
+    if patient.get("allergies"): user_content += f"Allergies: {patient.get('allergies')}\n"
+    
+    user_content += f"\nConversation History:\n{conversation_text}\n\n"
+    user_content += "Generate the SOAP note."
+
+    messages = [system, {"role": "user", "content": user_content}]
+
+    prov = _provider()
+    if prov == "gemini":
+        return _gemini_chat(messages)
+    if prov == "azure":
+        return _azure_chat(messages)
+    if prov == "openai":
+        return _openai_chat(messages)
+    if prov == "ollama":
+        return _ollama_chat(messages)
+
+    return "LLM not configured. Unable to generate notes."

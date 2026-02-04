@@ -1,0 +1,1 @@
+{"hierarchy": {"categories": ["cancer", "benign", "inflammatory", "infectious", "pigmentary"]}, "folder_classes": ["melanoma", "bcc", "scc", "ak", "nevus", "seborrheic_keratosis", "angioma", "wart", "eczema", "psoriasis", "lichen_planus", "urticaria", "impetigo", "herpes", "candida", "scabies", "vitiligo", "melasma", "hyperpigmentation"], "backbone": "resnet18"}

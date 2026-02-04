@@ -21,30 +21,35 @@ import ApplyDoctor from './pages/ApplyDoctor.jsx'
 import Messages from './pages/Messages.jsx'
 import Contact from './pages/Contact.jsx'
 import ForgotPassword from './pages/ForgotPassword.jsx'
+import SkinCoach from './pages/SkinCoach.jsx'
+import SkinJourney from './pages/SkinJourney.jsx'
+import Routine from './pages/Routine.jsx'
+import Onboarding from './pages/Onboarding.jsx'
+import FindDermatologists from './pages/FindDermatologists.jsx'
 // Landing removed per simplified hospital app scope
 
 function Protected({ children }) {
   const navigate = useNavigate()
   const [checked, setChecked] = useState(false)
-  useEffect(()=>{
-    (async ()=>{
-      try{
+  useEffect(() => {
+    (async () => {
+      try {
         // If no token at all, bail early
         const t = localStorage.getItem('access_token')
-        if (!t){ navigate('/login', { replace: true }); return }
+        if (!t) { navigate('/login', { replace: true }); return }
         const me = await (await import('./services/api.js')).api.me()
         // If backend refreshed the token, persist it
-        if (me && me.access_token){ try{ localStorage.setItem('access_token', me.access_token) }catch{} }
+        if (me && me.access_token) { try { localStorage.setItem('access_token', me.access_token) } catch { } }
         // Ensure role/id present for downstream UX
-        if (me && me.role){ localStorage.setItem('role', me.role) }
-        if (me && me.user_id){ localStorage.setItem('user_id', String(me.user_id)) }
+        if (me && me.role) { localStorage.setItem('role', me.role) }
+        if (me && me.user_id) { localStorage.setItem('user_id', String(me.user_id)) }
         setChecked(true)
-      }catch(err){
-        try{ localStorage.clear() }catch{}
+      } catch (err) {
+        try { localStorage.clear() } catch { }
         navigate('/login', { replace: true })
       }
     })()
-  },[])
+  }, [])
   if (!checked) return null
   return children
 }
@@ -56,6 +61,11 @@ export default function App() {
       <Route path="/register" element={<Register />} />
       <Route path="/apply-doctor" element={<ApplyDoctor />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/onboarding" element={<Protected><Onboarding /></Protected>} />
+      <Route path="/coach" element={<Protected><AppShell><SkinCoach /></AppShell></Protected>} />
+      <Route path="/journey" element={<Protected><AppShell><SkinJourney /></AppShell></Protected>} />
+      <Route path="/routine" element={<Protected><AppShell><Routine /></AppShell></Protected>} />
+      <Route path="/find-doctors" element={<Protected><AppShell><FindDermatologists /></AppShell></Protected>} />
 
       <Route path="/" element={<IndexRoute />} />
       <Route path="/dashboard" element={<Protected><AppShell><Dashboard /></AppShell></Protected>} />
@@ -79,9 +89,24 @@ export default function App() {
   )
 }
 
-function IndexRoute(){
-  const role = (localStorage.getItem('role')||'').toUpperCase()
+function IndexRoute() {
+  const role = (localStorage.getItem('role') || '').toUpperCase()
   const hasSession = !!(localStorage.getItem('user_id') || localStorage.getItem('patient_id'))
+  const [target, setTarget] = useState('')
+
+  useEffect(() => {
+    if (!role || !hasSession) return
+    if (role === 'PATIENT') {
+      import('./services/api.js').then(({ api }) => {
+        api.getProfile().then(() => setTarget('/dashboard'))
+          .catch(() => setTarget('/onboarding'))
+      })
+    } else {
+      setTarget('/dashboard')
+    }
+  }, [role, hasSession])
+
   if (!role || !hasSession) return <Navigate to="/login" replace />
-  return <AppShell><Navigate to="/dashboard" replace /></AppShell>
+  if (!target) return <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center animate-pulse">Loading...</div>
+  return <AppShell><Navigate to={target} replace /></AppShell>
 }

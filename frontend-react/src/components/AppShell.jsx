@@ -1,130 +1,156 @@
 import { Link, useLocation } from 'react-router-dom'
 import { ToastProvider } from './Toast.jsx'
 import { useEffect, useState } from 'react'
+import { motion } from 'framer-motion'
+import {
+  FaHome, FaStethoscope, FaComments, FaCalendarAlt,
+  FaMoneyBillWave, FaEnvelope, FaRobot, FaUserMd,
+  FaCog, FaSignOutAlt, FaMapMarkerAlt
+} from 'react-icons/fa'
+import { LuScan, LuSparkles, LuUser } from 'react-icons/lu'
 
-export default function AppShell({ children }){
+export default function AppShell({ children }) {
   const loc = useLocation()
   const role = (localStorage.getItem('role') || '').toUpperCase()
   const loggedIn = !!role
-  const onLogout = (e)=>{ e.preventDefault(); localStorage.clear(); location.href='/login' }
+  const onLogout = (e) => { e.preventDefault(); localStorage.clear(); location.href = '/login' }
+  const [showProfileMenu, setShowProfileMenu] = useState(false)
 
-  // Disable dark mode globally: ensure class is removed
-  useEffect(()=>{ document.documentElement.classList.remove('dark'); try{ localStorage.removeItem('theme') }catch{} }, [])
+  // Ensure dark mode is off for clinical theme
+  useEffect(() => { document.documentElement.classList.remove('dark'); }, [])
 
-  const name = (localStorage.getItem('username')||'')
-  const initials = name.split(' ').map(s=>s[0]).join('').slice(0,2).toUpperCase() || 'U'
+  const name = (localStorage.getItem('username') || 'User')
+  const initials = name.split(' ').map(s => s[0]).join('').slice(0, 2).toUpperCase()
+
+  // Full Screen Layout if not logged in
+  if (!loggedIn) {
+    return <ToastProvider>{children}</ToastProvider>
+  }
 
   return (
     <ToastProvider>
-    <div className="min-h-screen bg-backgroundSoft dark:bg-slate-900 text-textLuxury dark:text-slate-100 flex flex-col">
-      <header className="bg-backgroundSecondary/90 dark:bg-slate-800/80 backdrop-blur supports-[backdrop-filter]:bg-backgroundSecondary/80 border-b border-borderElegant dark:border-slate-700 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
-          <Link to={role==='ADMIN'?'/admin':'/dashboard'} className="flex items-center gap-3 text-inherit no-underline">
-            <div className="h-8 w-8 rounded-md bg-gradient-to-tr from-primaryBlue to-accentPurple2 ring-2 ring-accentGold/40" />
-            <div className="text-xl font-semibold">AI Skin Doctor</div>
-          </Link>
-          <nav className="hidden md:flex items-center gap-1">
-            {loggedIn ? (
-              role==='ADMIN' ? (
-                <>
-                  <Nav to="/admin" label="Admin" active={loc.pathname==='/admin'} />
-                  <Nav to="/admin/transactions" label="Transactions" active={loc.pathname==='/admin/transactions'} />
-                </>
-              ) : (
-                <>
-                  {role==='DOCTOR' && <Nav to="/doctor" label="Doctor" active={loc.pathname.startsWith('/doctor')} />}
-                  <Nav to="/lesions" label="Lesion Classification" active={loc.pathname==='/lesions'} />
-                  <Nav to="/chat" label="AI Chat" active={loc.pathname==='/chat'} />
-                  <Nav to="/appointments" label="Appointments" active={loc.pathname==='/appointments'} />
-                  <Nav to="/transactions" label="Transactions" active={loc.pathname==='/transactions'} />
-                  <Nav to="/messages" label="Messages" active={loc.pathname==='/messages'} />
-                </>
-              )
-            ) : (
-              <>
-                <Nav to="/login" label="Login" active={loc.pathname==='/login'} />
-                <Nav to="/register" label="Register" active={loc.pathname==='/register'} />
-              </>
-            )}
-          </nav>
-          <div className="flex items-center gap-2">
-            {loggedIn ? (
-              <>
-                <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-600 flex items-center justify-center text-sm font-semibold text-textLuxury dark:text-white">{initials}</div>
-                <a href="#" onClick={onLogout} className="btn-primary">Logout</a>
-              </>
-            ) : null}
-          </div>
-        </div>
-      </header>
-      <main className="max-w-7xl mx-auto px-6 py-8 flex-1 w-full">
-        {children}
-      </main>
-      <footer className="border-t border-borderElegant dark:border-slate-700 bg-backgroundSecondary dark:bg-slate-800">
-        <div className="max-w-7xl mx-auto px-6 py-10 grid grid-cols-1 sm:grid-cols-3 gap-8 text-sm text-textLuxuryMuted dark:text-slate-300">
-          <div>
-            <div className="text-lg font-semibold text-textLuxury dark:text-white mb-2">AI Skin Doctor</div>
-            <p>Your private dermatology + AI concierge.</p>
-            <div className="mt-4">© {new Date().getFullYear()} AI Skin Doctor</div>
-          </div>
-          <div>
-            <div className="font-semibold text-textLuxury dark:text-white mb-2">Quick Links</div>
-            <div className="grid grid-cols-2 gap-2">
-              {role==='ADMIN' ? (
-                <>
-                  <Link to="/admin" className="text-primaryBlue">Admin</Link>
-                  <Link to="/transactions" className="text-primaryBlue">Transactions</Link>
-                </>
-              ) : (
-                <>
-                  <Link to="/dashboard" className="text-primaryBlue">Dashboard</Link>
-                  <Link to="/lesions" className="text-primaryBlue">Lesion Classification</Link>
-                  <Link to="/chat" className="text-primaryBlue">AI Chat</Link>
-                  <Link to="/appointments" className="text-primaryBlue">Appointments</Link>
-                  <Link to="/transactions" className="text-primaryBlue">Transactions</Link>
-                  <Link to="/messages" className="text-primaryBlue">Messages</Link>
-                  <Link to="/contact" className="text-primaryBlue">Contact</Link>
-                </>
-              )}
+      <div className="relative min-h-screen bg-surface">
+        {/* DYNAMIC DOCK - Desktop (Left Center) */}
+        <motion.nav 
+          initial={{ x: -100, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          className="hidden lg:flex dock left-6 top-1/2 -translate-y-1/2 flex-col gap-1"
+        >
+          {role === 'ADMIN' ? (
+            <>
+              <DockIcon to="/admin" icon={FaHome} active={loc.pathname === '/admin'} label="Overview" />
+              <DockIcon to="/admin/transactions" icon={FaMoneyBillWave} active={loc.pathname.includes('transactions')} label="Transactions" />
+            </>
+          ) : (
+            <>
+              <DockIcon to="/dashboard" icon={FaHome} active={loc.pathname === '/dashboard'} label="Dashboard" />
+              <DockIcon to="/lesions" icon={LuScan} active={loc.pathname === '/lesions'} label="AI Scan" aiFeature />
+              <DockIcon to="/coach" icon={LuSparkles} active={loc.pathname === '/coach'} label="Coach" isNew />
+              <DockIcon to="/chat" icon={FaRobot} active={loc.pathname === '/chat'} label="AI Chat" aiFeature />
+              <DockIcon to="/journey" icon={FaComments} active={loc.pathname === '/journey'} label="Journey" isNew />
+              <DockIcon to="/routine" icon={FaStethoscope} active={loc.pathname === '/routine'} label="Routine" />
+              <DockIcon to="/find-doctors" icon={FaMapMarkerAlt} active={loc.pathname === '/find-doctors'} label="Find Doctors" isNew />
+              <div className="h-px bg-white/20 my-2" />
+              <DockIcon to="/appointments" icon={FaCalendarAlt} active={loc.pathname === '/appointments'} label="Appointments" />
+              <DockIcon to="/messages" icon={FaEnvelope} active={loc.pathname === '/messages'} label="Messages" />
+              <DockIcon to="/transactions" icon={FaMoneyBillWave} active={loc.pathname === '/transactions'} label="Payments" />
+            </>
+          )}
+        </motion.nav>
+
+        {/* DYNAMIC DOCK - Mobile (Bottom Center) */}
+        <motion.nav 
+          initial={{ y: 100, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="lg:hidden dock bottom-6 left-1/2 -translate-x-1/2 gap-1"
+        >
+          <DockIcon to="/dashboard" icon={FaHome} active={loc.pathname === '/dashboard'} label="Home" />
+          <DockIcon to="/lesions" icon={LuScan} active={loc.pathname === '/lesions'} label="Scan" aiFeature />
+          <DockIcon to="/chat" icon={FaRobot} active={loc.pathname === '/chat'} label="AI" aiFeature />
+          <DockIcon to="/appointments" icon={FaCalendarAlt} active={loc.pathname === '/appointments'} label="Appointments" />
+          <button onClick={() => setShowProfileMenu(!showProfileMenu)} className="dock-icon">
+            <LuUser size={20} />
+          </button>
+        </motion.nav>
+
+        {/* Mobile Profile Menu */}
+        {showProfileMenu && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="lg:hidden fixed bottom-24 left-1/2 -translate-x-1/2 card-glass p-4 z-50 min-w-[200px]"
+          >
+            <div className="text-center mb-3">
+              <div className="h-12 w-12 mx-auto rounded-full bg-accent-medical/10 flex items-center justify-center font-mono font-semibold text-accent-medical mb-2">
+                {initials}
+              </div>
+              <p className="text-sm font-semibold text-text-primary">{name}</p>
+              <p className="text-xs text-text-secondary capitalize">{role.toLowerCase()}</p>
             </div>
-          </div>
-          <div>
-            <div className="font-semibold text-textLuxury dark:text-white mb-2">Newsletter</div>
-            <NewsletterForm />
-            <div className="mt-4">
-              <div>support@example.com</div>
-              <div>+91-00000 00000</div>
+            <button
+              onClick={onLogout}
+              className="w-full btn-ghost text-sm py-2 flex items-center justify-center gap-2"
+            >
+              <FaSignOutAlt size={14} />
+              Sign Out
+            </button>
+          </motion.div>
+        )}
+
+        {/* Floating Header - Minimal Branding */}
+        <header className="fixed top-6 right-6 z-40 hidden lg:flex items-center gap-4">
+          <div className="card-glass px-4 py-2 flex items-center gap-3">
+            <div className="h-8 w-8 rounded-full bg-accent-medical/10 flex items-center justify-center font-mono font-semibold text-accent-medical text-sm">
+              {initials}
             </div>
+            <div className="text-sm">
+              <p className="font-medium text-text-primary tracking-tight">{name}</p>
+              <p className="text-xs text-text-secondary capitalize">{role.toLowerCase()}</p>
+            </div>
+            <button onClick={onLogout} className="ml-2 text-text-secondary hover:text-accent-medical transition-colors">
+              <FaSignOutAlt size={16} />
+            </button>
           </div>
-        </div>
-      </footer>
-    </div>
+        </header>
+
+        {/* Main Content Area - Full Width */}
+        <main className="min-h-screen pt-6 pb-32 lg:pb-12 px-6 lg:pl-32">
+          <div className="max-w-[1600px] mx-auto">
+            {children}
+          </div>
+        </main>
+      </div>
     </ToastProvider>
   )
 }
 
-function Nav({ to, label, active }){
+function DockIcon({ to, icon: Icon, active, label, isNew, aiFeature }) {
+  const [showTooltip, setShowTooltip] = useState(false)
+  
   return (
-    <Link className={("px-4 py-2 text-sm font-medium text-textLuxury dark:text-slate-100 hover:text-primaryBlue border-b-2 ")+(active?"border-primaryBlue text-primaryBlue":"border-transparent")} to={to}>{label}</Link>
-  )
-}
-
-function NewsletterForm(){
-  const [email, setEmail] = useState('')
-  const [ok, setOk] = useState('')
-  async function submit(e){
-    e.preventDefault(); setOk('')
-    try{
-      await fetch((import.meta.env.VITE_API_BASE_URL||'http://127.0.0.1:8000')+`/support/newsletter/subscribe`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email }) })
-      setOk('Subscribed!')
-      setEmail('')
-    }catch{ setOk('Failed to subscribe') }
-  }
-  return (
-    <form onSubmit={submit} className="flex gap-2">
-      <input className="flex-1" type="email" placeholder="Your email" value={email} onChange={e=>setEmail(e.target.value)} required />
-      <button className="btn-primary btn-sm" type="submit">Join</button>
-      {ok && <div className="text-xs">{ok}</div>}
-    </form>
+    <div className="relative">
+      <Link
+        to={to}
+        onMouseEnter={() => setShowTooltip(true)}
+        onMouseLeave={() => setShowTooltip(false)}
+        className={`dock-icon ${active ? 'active' : ''} ${aiFeature && active ? '!text-accent-ai !bg-ai-50' : ''}`}
+      >
+        <Icon size={20} />
+        {isNew && (
+          <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-accent-ai animate-pulse" />
+        )}
+      </Link>
+      
+      {/* Tooltip */}
+      {showTooltip && (
+        <motion.div
+          initial={{ opacity: 0, x: -10 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="absolute left-full ml-4 top-1/2 -translate-y-1/2 card-glass px-3 py-1.5 text-xs font-medium text-text-primary whitespace-nowrap pointer-events-none hidden lg:block"
+        >
+          {label}
+        </motion.div>
+      )}
+    </div>
   )
 }

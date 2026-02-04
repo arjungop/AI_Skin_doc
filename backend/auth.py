@@ -3,7 +3,12 @@ from sqlalchemy.orm import Session
 from . import models, database, crud
 from pydantic import BaseModel, EmailStr
 from .security import create_access_token
+from .security import create_access_token
 from .security import get_current_user
+
+# Re-export for convenience or define if missing in security
+def get_current_user_id(user: models.User = Depends(get_current_user)) -> int:
+    return user.user_id
 from datetime import datetime
 
 router = APIRouter(prefix="/auth", tags=["auth"])

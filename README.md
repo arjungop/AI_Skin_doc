@@ -11,7 +11,7 @@ Now, just run `sdoc` in your project directory to activate the venv.
 
 A comprehensive AI-powered healthcare platform for skin lesion analysis and patient-doctor communication, built with FastAPI, React, and advanced machine learning models.
 
-## 🚀 Features
+##  Features
 
 ### 🔬 AI-Powered Skin Analysis
 - **Deep Learning Model**: ResNet18-based skin lesion classification
@@ -126,7 +126,7 @@ npm install
 python -c "from backend.models import Base; from backend.database import engine; Base.metadata.create_all(bind=engine)"
 ```
 
-## 🚀 Running the Application
+##  Running the Application
 
 ### Start Backend Server
 ```bash
@@ -229,7 +229,7 @@ cd frontend-react
 npm test
 ```
 
-## 🚀 Deployment
+##  Deployment
 
 ### Azure Deployment
 ```bash
@@ -298,7 +298,7 @@ For support, email your-email@example.com or create an issue in this repository.
 
 ---
 
-**⚠️ Medical Disclaimer**: This application is for educational and research purposes only. It should not be used as a substitute for professional medical advice, diagnosis, or treatment. Always consult with qualified healthcare providers for medical decisions.
+**[WARNING] Medical Disclaimer**: This application is for educational and research purposes only. It should not be used as a substitute for professional medical advice, diagnosis, or treatment. Always consult with qualified healthcare providers for medical decisions.
 
 ## Download the pretrained models:
 ### Attention U-Net

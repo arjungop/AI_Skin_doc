@@ -30,13 +30,24 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
         patient = db.query(models.Patient).filter(models.Patient.patient_id == req.patient_id).first()
         if not patient:
             raise HTTPException(status_code=404, detail="Patient not found")
-        # minimal patient context
+        
+        # Profile fetch
+        profile = db.query(models.UserProfile).filter(models.UserProfile.user_id == patient.user_id).first()
+        
         patient_dict = {
             "first_name": patient.first_name,
             "last_name": patient.last_name,
             "age": patient.age,
             "gender": patient.gender,
         }
+        if profile:
+            patient_dict.update({
+                "skin_type": profile.skin_type,
+                "sensitivity": profile.sensitivity_level,
+                "concerns": profile.goals, # goals store concerns list
+                "allergies": profile.allergies,
+                "location": profile.location_city
+            })
     reply = chat_reply(req.prompt, patient=patient_dict, history=[m.dict() for m in (req.history or [])])
     return {"reply": reply}
 
@@ -109,6 +120,65 @@ def chat_stream(req: ChatRequest, db: Session = Depends(get_db)):
                 "age": patient.age,
                 "gender": patient.gender,
             }
+            profile = db.query(models.UserProfile).filter(models.UserProfile.user_id == patient.user_id).first()
+            if profile:
+                patient_dict.update({
+                    "skin_type": profile.skin_type,
+                    "sensitivity": profile.sensitivity_level,
+                    "concerns": profile.goals,
+                    "allergies": profile.allergies,
+                    "location": profile.location_city
+                })
     history = [m.dict() for m in (req.history or [])]
     gen = stream_chat_reply(req.prompt, patient=patient_dict, history=history)
     return StreamingResponse(gen, media_type="text/plain")
+
+
+class NoteGenerationRequest(BaseModel):
+    room_id: int
+
+@router.post("/generate_notes")
+def generate_notes(req: NoteGenerationRequest, db: Session = Depends(get_db)):
+    room = db.query(models.ChatRoom).filter(models.ChatRoom.room_id == req.room_id).first()
+    if not room:
+        raise HTTPException(status_code=404, detail="Chat room not found")
+    
+    # Fetch Messages
+    messages = db.query(models.Message)\
+        .filter(models.Message.room_id == req.room_id)\
+        .order_by(models.Message.created_at.asc())\
+        .all()
+    
+    if not messages:
+        return {"notes": "No conversation history available to generate notes."}
+
+    # Fetch Patient Profile
+    patient = db.query(models.Patient).filter(models.Patient.patient_id == room.patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    patient_dict = {
+        "first_name": patient.first_name,
+        "last_name": patient.last_name,
+        "age": patient.age,
+        "gender": patient.gender,
+    }
+    profile = db.query(models.UserProfile).filter(models.UserProfile.user_id == patient.user_id).first()
+    if profile:
+        patient_dict.update({
+            "skin_type": profile.skin_type,
+            "allergies": profile.allergies,
+        })
+    
+    # Format history
+    chat_history = []
+    for m in messages:
+        # We need to map user_id to role. 
+        # Doctor messages -> assistant/doctor, Patient messages -> user/patient
+        role = "assistant" if m.sender_user_id == room.doctor.user_id else "user"
+        chat_history.append({"role": role, "content": m.content or "[Image/File]"})
+
+    from backend.llm_service import generate_clinical_notes
+    notes = generate_clinical_notes(patient_dict, chat_history)
+    
+    return {"notes": notes}
