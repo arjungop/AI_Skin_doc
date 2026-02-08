@@ -5,7 +5,7 @@
 BACKBONE="${1:-convnext_large}"
 BATCH_SIZE="${2:-32}"
 EPOCHS="${3:-50}"
-GPU_TYPE="${4:-a100}"
+GPU_TYPE="${4:-auto}"
 WALLTIME="48:00:00"
 
 JOB_NAME="skindoc_${BACKBONE}_e${EPOCHS}"
