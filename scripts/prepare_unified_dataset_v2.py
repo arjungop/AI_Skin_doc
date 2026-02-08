@@ -109,15 +109,26 @@ def process_massive2():
     """Process the Massive 2 Dataset (262k images)"""
     print("  Processing Massive 2 dataset...")
     massive_paths = [
+        Path("massive_skin_disease/balanced_dataset/balanced_dataset"),
+        Path("massive_skin_disease"),
         Path("massive 2/balanced_dataset/balanced_dataset"),
-        Path("massive_2/balanced_dataset/balanced_dataset"),
+        DATASETS_DIR / "massive_skin_disease",
         DATASETS_DIR / "massive 2" / "balanced_dataset" / "balanced_dataset",
-        Path("/Users/gopal/Skin-Doc/massive 2/balanced_dataset/balanced_dataset")
     ]
-    source_dir = next((p for p in massive_paths if p.exists()), None)
+    
+    source_dir = None
+    for p in massive_paths:
+        if p.exists() and any(p.iterdir()):
+            source_dir = p
+            break
+        
     if not source_dir:
         print("  Skipping Massive 2: Directory not found")
         return []
+
+    # Check for subdirectories if the top-level was found
+    if source_dir.name == "massive_skin_disease" and (source_dir / "balanced_dataset").exists():
+        source_dir = source_dir / "balanced_dataset" / "balanced_dataset"
         
     samples = []
     for disease_folder in source_dir.iterdir():
@@ -132,17 +143,43 @@ def process_massive2():
 def process_isic2019():
     """Process ISIC 2019"""
     print("  Processing ISIC 2019...")
-    csv_path = DATASETS_DIR / "isic_data" / "isic_2019" / "ISIC_2019_Training_GroundTruth.csv"
-    images_dir = DATASETS_DIR / "isic_data" / "isic_2019" / "ISIC_2019_Training_Input"
-    if not csv_path.exists(): return []
+    
+    # Try common cluster paths
+    csv_paths = [
+        DATASETS_DIR / "isic_data" / "isic_2019" / "ISIC_2019_Training_GroundTruth.csv",
+        Path("isic_data/isic_2019/ISIC_2019_Training_GroundTruth.csv"),
+        Path("isic_data/ISIC_2019_Training_GroundTruth.csv")
+    ]
+    
+    csv_path = next((p for p in csv_paths if p.exists()), None)
+    if not csv_path:
+        print("    ISIC 2019 CSV not found.")
+        return []
+
+    images_dirs = [
+        csv_path.parent / "ISIC_2019_Training_Input",
+        csv_path.parent / "images"
+    ]
+    images_dir = next((d for d in images_dirs if d.exists()), None)
+    if not images_dir:
+        print("    ISIC 2019 Image directory not found.")
+        return []
+
     df = pd.read_csv(csv_path)
     samples = []
-    for _, row in tqdm(df.iterrows(), total=len(df)):
+    for _, row in tqdm(df.iterrows(), total=len(df), leave=False):
         img_name = row['image']
-        disease = next((DISEASE_MAP.get(col, col.lower()) for col in df.columns if col != 'image' and row[col] == 1.0), None)
+        # Find active class
+        disease = None
+        for col in df.columns:
+            if col != 'image' and row[col] == 1.0:
+                disease = DISEASE_MAP.get(col, col.lower())
+                break
+        
         if disease:
             img_path = images_dir / f"{img_name}.jpg"
-            if img_path.exists(): samples.append((img_path, disease))
+            if img_path.exists(): 
+                samples.append((img_path, disease))
     print(f"    Found {len(samples)} images")
     return samples
 
@@ -225,13 +262,22 @@ def main():
         val_final.extend([(img, disease) for img in images[n_test : n_test + n_val]])
         train_final.extend([(img, disease) for img in images[n_test + n_val:]])
 
-    # 5. Copy Files
+    # 5. Copy Files (using Fast Hardlinks)
     def copy_files(samples, target_dir, name):
-        print(f"  Creating {name} set ({len(samples)} files)...")
+        print(f"  Organizing {name} set ({len(samples)} files)...")
         for img_path, disease in tqdm(samples, leave=False):
-            dest = target_dir / disease
-            dest.mkdir(exist_ok=True)
-            shutil.copy2(img_path, dest / img_path.name)
+            dest_dir = target_dir / disease
+            dest_dir.mkdir(exist_ok=True)
+            dest_file = dest_dir / img_path.name
+            
+            try:
+                # Try hardlink (instant, 0 extra space)
+                if dest_file.exists():
+                    dest_file.unlink()
+                os.link(img_path, dest_file)
+            except (OSError, AttributeError):
+                # Fallback to copy if hardlink fails (e.g., across partitions)
+                shutil.copy2(img_path, dest_file)
 
     copy_files(train_final, OUTPUT_TRAIN, "TRAIN")
     copy_files(val_final, OUTPUT_VAL, "VAL")
