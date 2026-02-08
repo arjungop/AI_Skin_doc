@@ -100,6 +100,7 @@ class RobustSkinClassifier(nn.Module):
         "efficientnet_b4": (models.efficientnet_b4, models.EfficientNet_B4_Weights.DEFAULT, 1792),
         "efficientnet_v2_m": (models.efficientnet_v2_m, models.EfficientNet_V2_M_Weights.DEFAULT, 1280),
         "convnext_base": (models.convnext_base, models.ConvNeXt_Base_Weights.DEFAULT, 1024),
+        "convnext_large": (models.convnext_large, models.ConvNeXt_Large_Weights.DEFAULT, 1536),
         "swin_b": (models.swin_b, models.Swin_B_Weights.DEFAULT, 1024),
         "resnet50": (models.resnet50, models.ResNet50_Weights.DEFAULT, 2048),
     }
@@ -602,18 +603,19 @@ class BulletproofTrainer:
                     continue
                 
                 # Backward
-                self.scaler.scale(loss).backward()
+                self.scaler.scale(loss / self.config['grad_accum']).backward()
                 
-                # Gradient clipping
-                self.scaler.unscale_(self.optimizer)
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                if (batch_idx + 1) % self.config['grad_accum'] == 0:
+                    # Gradient clipping
+                    self.scaler.unscale_(self.optimizer)
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                    
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                    self.optimizer.zero_grad(set_to_none=True)
+                    self.scheduler.step()
                 
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
-                self.optimizer.zero_grad(set_to_none=True)
-                self.scheduler.step()
-                
-                # Metrics
+                # Metrics (log unscaled loss)
                 total_loss += loss.item()
                 cat_pred = cat_logits.argmax(dim=1)
                 dis_pred = dis_logits.argmax(dim=1)
@@ -768,12 +770,13 @@ def main():
     parser.add_argument("--checkpoint_dir", type=str, default="checkpoints")
     
     # Model
-    parser.add_argument("--backbone", type=str, default="efficientnet_b4",
-                       choices=["efficientnet_b4", "efficientnet_v2_m", "convnext_base", "swin_b", "resnet50"])
+    parser.add_argument("--backbone", type=str, default="convnext_large",
+                       choices=["efficientnet_b4", "efficientnet_v2_m", "convnext_base", "convnext_large", "swin_b", "resnet50"])
     
     # Training
     parser.add_argument("--epochs", type=int, default=50)
-    parser.add_argument("--batch_size", type=int, default=64)
+    parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--grad_accum", type=int, default=2)
     parser.add_argument("--image_size", type=int, default=384)
     parser.add_argument("--learning_rate", type=float, default=1e-4)
     parser.add_argument("--weight_decay", type=float, default=0.01)

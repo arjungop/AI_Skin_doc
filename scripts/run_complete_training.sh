@@ -13,9 +13,9 @@ echo
 
 # Configuration - Set these variables
 PROJECT_DIR="${HOME}/Skin-Doc"
-BACKBONE="${1:-efficientnet_b4}"  # Default to efficientnet_b4
-BATCH_SIZE="${2:-64}"              # Default to 64
-EPOCHS="${3:-50}"                  # Default to 50
+BACKBONE="${1:-convnext_large}"
+BATCH_SIZE="${2:-32}"
+EPOCHS="${3:-50}"
 
 # Colors
 GREEN='\033[0;32m'
@@ -86,14 +86,7 @@ echo
 echo -e "${GREEN}---${NC}"
 
 if [ -d "${PROJECT_DIR}/data/unified_train" ] && [ "$(ls -A ${PROJECT_DIR}/data/unified_train 2>/dev/null | wc -l)" -gt 0 ]; then
-    echo -e "${YELLOW}Unified dataset already exists.${NC}"
-    read -p "Recreate it? (y/N): " recreate
-    if [[ "$recreate" =~ ^[Yy]$ ]]; then
-        echo "Removing old unified dataset..."
-        rm -rf "${PROJECT_DIR}/data/unified_train" "${PROJECT_DIR}/data/unified_val"
-    else
-        echo "Skipping data preparation..."
-    fi
+    echo "Using existing unified dataset (to force recreate, delete data/unified_train)"
 fi
 
 if [ ! -d "${PROJECT_DIR}/data/unified_train" ] || [ "$(ls -A ${PROJECT_DIR}/data/unified_train 2>/dev/null | wc -l)" -eq 0 ]; then
@@ -141,10 +134,11 @@ echo
 LOG_FILE="${CHECKPOINT_DIR}/training.log"
 
 # Run training with output to both console and log
-python scripts/train_a100.py \
+python scripts/train_bulletproof.py \
     --backbone "${BACKBONE}" \
     --batch_size "${BATCH_SIZE}" \
     --epochs "${EPOCHS}" \
+    --grad_accum 2 \
     --checkpoint_dir "${CHECKPOINT_DIR}" \
     --use_weighted_sampling \
     2>&1 | tee "${LOG_FILE}"

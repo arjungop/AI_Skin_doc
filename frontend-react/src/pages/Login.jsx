@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { api } from '../services/api'
-import { LuMail, LuLock, LuArrowRight, LuCheck } from 'react-icons/lu'
+import { LuArrowRight, LuCheck, LuEye, LuEyeOff, LuSparkles } from 'react-icons/lu'
 import { motion } from 'framer-motion'
 
 export default function Login() {
@@ -47,103 +47,222 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#FCFCFC] p-6 relative">
-      <div className="w-full max-w-lg">
-        {/* Logo Brand */}
-        <div className="text-center mb-10">
-          <h1 className="font-serif text-5xl font-bold text-[#10201D] mb-2 tracking-tight">Skin.AI</h1>
-          <p className="text-slate-400 font-medium uppercase tracking-widest text-xs">Precision Dermatology</p>
+    <div className="min-h-screen flex">
+      {/* Left Panel - Animated Gradient Background */}
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
+        {/* Animated mesh gradient */}
+        <div className="absolute inset-0 bg-surface">
+          <div className="absolute inset-0 opacity-60">
+            <div className="absolute top-0 left-0 w-[600px] h-[600px] bg-primary-500/20 rounded-full blur-[120px] animate-float" />
+            <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-accent-500/20 rounded-full blur-[100px] animate-float animation-delay-200" />
+            <div className="absolute top-1/2 left-1/2 w-[400px] h-[400px] bg-ai-500/15 rounded-full blur-[80px] animate-float animation-delay-500" />
+          </div>
         </div>
 
+        {/* Content */}
+        <div className="relative z-10 flex flex-col justify-between p-12 w-full">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
+                <LuSparkles className="text-white" size={20} />
+              </div>
+              <span className="text-2xl font-bold text-gradient-primary">Skin.AI</span>
+            </div>
+          </motion.div>
+
+          <motion.div
+            className="space-y-6"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+          >
+            <h1 className="text-5xl xl:text-6xl font-bold text-text-primary leading-tight">
+              Your Skin's
+              <br />
+              <span className="text-gradient-primary">Digital Twin</span>
+            </h1>
+            <p className="text-xl text-text-secondary max-w-md leading-relaxed">
+              AI-powered dermatology insights, personalized routines, and expert consultations — all in one place.
+            </p>
+
+            {/* Feature pills */}
+            <div className="flex flex-wrap gap-3 pt-4">
+              {['AI Analysis', 'Expert Doctors', 'Personalized Care'].map((feature, i) => (
+                <motion.div
+                  key={feature}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.6 + i * 0.1 }}
+                  className="chip"
+                >
+                  {feature}
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.8 }}
+            className="text-sm text-text-tertiary"
+          >
+            Trusted by 10,000+ patients worldwide
+          </motion.div>
+        </div>
+      </div>
+
+      {/* Right Panel - Login Form */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12">
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          className="card-ceramic p-10 md:p-12"
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.5 }}
+          className="w-full max-w-md"
         >
-          <div className="mb-8">
-            <h2 className="font-serif text-3xl font-bold text-[#10201D] mb-1">Welcome Back</h2>
-            <p className="text-slate-500">Sign in to your dashboard.</p>
+          {/* Mobile Logo */}
+          <div className="lg:hidden flex items-center gap-3 mb-10">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
+              <LuSparkles className="text-white" size={20} />
+            </div>
+            <span className="text-2xl font-bold text-gradient-primary">Skin.AI</span>
+          </div>
+
+          <div className="mb-10">
+            <h2 className="text-3xl font-bold text-text-primary mb-2">Welcome back</h2>
+            <p className="text-text-secondary">Sign in to continue to your dashboard</p>
           </div>
 
           <form onSubmit={onSubmit} className="space-y-6">
+            {/* Email */}
             <div className="space-y-2">
-              <label className="text-xs uppercase tracking-widest font-bold text-[#10201D]">Email</label>
-              <div className="relative">
-                <input
-                  className="pl-4 pr-4 bg-surface border-2 border-border-light focus:bg-white focus:border-accent-medical transition-colors rounded-xl py-4 font-medium"
-                  type="email"
-                  placeholder="name@example.com"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  required
-                />
-              </div>
+              <label className="text-sm font-medium text-text-secondary uppercase tracking-wider">
+                Email
+              </label>
+              <input
+                type="email"
+                placeholder="name@example.com"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                className="input"
+                required
+              />
             </div>
 
+            {/* Password */}
             <div className="space-y-2">
               <div className="flex justify-between items-center">
-                <label className="text-xs uppercase tracking-widest font-bold text-[#10201D]">Password</label>
-                <Link className="text-xs font-bold text-slate-400 hover:text-[#10201D] transition-colors" to="/forgot-password">Forgot?</Link>
+                <label className="text-sm font-medium text-text-secondary uppercase tracking-wider">
+                  Password
+                </label>
+                <Link
+                  to="/forgot-password"
+                  className="text-sm text-primary-500 hover:text-primary-400 transition-colors font-medium"
+                >
+                  Forgot?
+                </Link>
               </div>
-
               <div className="relative">
                 <input
-                  className="pl-4 pr-16 bg-surface border-2 border-border-light focus:bg-white focus:border-accent-medical transition-colors rounded-xl py-4 font-medium"
                   type={show ? 'text' : 'password'}
                   placeholder="••••••••"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
+                  className="input pr-12"
                   required
                 />
                 <button
                   type="button"
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 hover:text-[#10201D] uppercase tracking-wider"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-primary transition-colors"
                   onClick={() => setShow(!show)}
                 >
-                  {show ? 'Hide' : 'Show'}
+                  {show ? <LuEyeOff size={20} /> : <LuEye size={20} />}
                 </button>
               </div>
             </div>
 
-            <div className="py-2">
-              <label className="flex items-center gap-3 cursor-pointer group">
-                <div className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-colors ${remember ? 'bg-accent-medical border-accent-medical' : 'bg-white border-border-medium group-hover:border-accent-medical'}`}>
-                  {remember && <LuCheck className="text-white text-xs stroke-[4]" />}
-                </div>
-                <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} className="hidden" />
-                <span className="text-sm text-slate-600 font-medium group-hover:text-[#10201D] transition-colors">Keep me signed in</span>
-              </label>
-            </div>
+            {/* Remember Me */}
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${remember
+                  ? 'bg-primary-500 border-primary-500'
+                  : 'border-white/20 group-hover:border-primary-500/50'
+                }`}>
+                {remember && <LuCheck className="text-white" size={14} strokeWidth={3} />}
+              </div>
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={e => setRemember(e.target.checked)}
+                className="hidden"
+              />
+              <span className="text-sm text-text-secondary group-hover:text-text-primary transition-colors">
+                Keep me signed in
+              </span>
+            </label>
 
-            <button
-              className="w-full btn-primary py-5 text-lg shadow-none hover:shadow-xl relative overflow-hidden group rounded-xl"
+            {/* Submit Button */}
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="btn-primary w-full py-4 text-lg"
               type="submit"
               disabled={loading}
             >
-              <span className="relative z-10 flex items-center justify-center gap-3 font-bold">
-                {loading ? 'Please Wait...' : 'Sign In'}
-                {!loading && <LuArrowRight className="group-hover:translate-x-1 transition-transform stroke-[3]" />}
-              </span>
-            </button>
+              {loading ? (
+                <span className="flex items-center gap-2">
+                  <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Signing in...
+                </span>
+              ) : (
+                <span className="flex items-center justify-center gap-2">
+                  Sign In
+                  <LuArrowRight size={20} />
+                </span>
+              )}
+            </motion.button>
 
+            {/* Message */}
             {msg && (
-              <div className={`p-4 rounded-xl text-center text-sm font-bold ${msg.includes('Welcome') ? 'bg-green-100 text-green-800' : 'bg-red-50 text-red-600'}`}>
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`p-4 rounded-xl text-center text-sm font-medium ${msg.includes('Welcome')
+                    ? 'bg-success/10 text-success border border-success/20'
+                    : 'bg-danger/10 text-danger border border-danger/20'
+                  }`}
+              >
                 {msg}
-              </div>
+              </motion.div>
             )}
           </form>
 
+          {/* Sign up link */}
           <div className="mt-10 text-center">
-            <p className="text-slate-500 font-medium">
-              New to Skin.AI? <Link className="text-[#10201D] font-bold hover:underline" to="/register">Create Account</Link>
+            <p className="text-text-secondary">
+              New to Skin.AI?{' '}
+              <Link to="/register" className="text-primary-500 hover:text-primary-400 font-semibold transition-colors">
+                Create an account
+              </Link>
             </p>
           </div>
-        </motion.div>
 
-        <div className="mt-8 text-center">
-          <Link className="text-xs text-slate-400 font-bold uppercase tracking-widest hover:text-[#10201D] transition-colors" to="/apply-doctor">Apply as Specialist</Link>
-        </div>
+          {/* Apply as doctor */}
+          <div className="mt-6 text-center">
+            <Link
+              to="/apply-doctor"
+              className="text-sm text-text-tertiary hover:text-text-secondary transition-colors"
+            >
+              Are you a dermatologist? <span className="text-accent-400">Apply here</span>
+            </Link>
+          </div>
+        </motion.div>
       </div>
     </div>
   )

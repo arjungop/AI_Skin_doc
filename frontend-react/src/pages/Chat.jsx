@@ -1,7 +1,9 @@
 import { useEffect, useState, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
+import { motion, AnimatePresence } from 'framer-motion'
 import { api } from '../services/api'
-import { FaPaperPlane, FaRobot, FaUser, FaNotesMedical, FaHistory, FaTrashAlt, FaPen } from 'react-icons/fa'
+import { LuSend, LuSparkles, LuUser, LuTrash2, LuMessageCircle, LuPlus, LuHistory, LuBot } from 'react-icons/lu'
+import { Card, CardTitle, IconWrapper } from '../components/Card'
 
 export default function Chat() {
   const [messages, setMessages] = useState([])
@@ -96,106 +98,138 @@ export default function Chat() {
   }
 
   return (
-    <div className="h-[calc(100vh-140px)] animate-fade-in flex gap-6">
+    <div className="h-[calc(100vh-140px)] flex gap-6">
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col bg-white dark:bg-slate-800 rounded-3xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden relative">
-        {/* Header */}
-        <div className="bg-slate-50 dark:bg-slate-900 border-b border-slate-100 p-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center">
-              <FaRobot size={20} />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <Card variant="glass" className="flex-1 flex flex-col p-0 overflow-hidden" hover={false}>
+          {/* Header */}
+          <div className="bg-surface-elevated/50 border-b border-white/10 p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <IconWrapper variant="ai">
+                <LuBot size={20} />
+              </IconWrapper>
+              <div>
+                <h1 className="font-bold text-text-primary">AI Medical Assistant</h1>
+                <p className="text-xs text-primary-400 font-medium flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-primary-400 animate-pulse" />
+                  Online • {status || 'Gemini'}
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="font-bold text-slate-800 dark:text-white">AI Medical Assistant</h1>
-              <p className="text-xs text-green-600 font-medium flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                Online • {status || 'Gemini'}
-              </p>
+            <div className="flex gap-2">
+              <button onClick={() => { setMessages([]); setSelectedSession(null) }} className="btn-ghost text-xs">New Chat</button>
+              <button onClick={saveCurrentToHistory} className="btn-ghost text-xs">Save</button>
             </div>
           </div>
-          <div className="flex gap-2">
-            <button onClick={() => { setMessages([]); setSelectedSession(null) }} className="btn-ghost text-xs">New Chat</button>
-            <button onClick={saveCurrentToHistory} className="btn-ghost text-xs">Save</button>
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-6" ref={scrollRef}>
+            {messages.length === 0 && (
+              <div className="h-full flex flex-col items-center justify-center text-center">
+                <div className="w-20 h-20 rounded-2xl bg-ai-500/10 flex items-center justify-center mb-6">
+                  <LuSparkles className="text-ai-400" size={36} />
+                </div>
+                <h3 className="text-2xl font-bold text-text-primary mb-2">How can I help your skin today?</h3>
+                <p className="text-text-tertiary mb-8">Ask me about symptoms, treatments, or ingredients</p>
+                <div className="grid grid-cols-2 gap-3 w-full max-w-lg">
+                  {suggestions.map((s, i) => (
+                    <motion.button
+                      key={i}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setInput(s)}
+                      className="p-4 text-sm text-left bg-white/5 border border-white/10 rounded-xl hover:border-ai-500/30 hover:bg-ai-500/5 transition-all text-text-secondary"
+                    >
+                      {s}
+                    </motion.button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <AnimatePresence>
+              {messages.map((m, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`flex gap-4 ${m.who === 'You' ? 'flex-row-reverse' : ''}`}
+                >
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-1 ${m.who === 'You' ? 'bg-accent-500/10 text-accent-400' : 'bg-ai-500/10 text-ai-400'}`}>
+                    {m.who === 'You' ? <LuUser size={16} /> : <LuBot size={18} />}
+                  </div>
+                  <div className={`max-w-[80%] p-4 rounded-2xl text-sm leading-relaxed ${m.who === 'You' ? 'bg-accent-500/10 text-text-primary rounded-tr-none border border-accent-500/20' : 'bg-white/5 border border-white/10 text-text-secondary rounded-tl-none'}`}>
+                    {m.who === 'AI' ? <ReactMarkdown className="prose prose-sm prose-invert max-w-none">{m.text}</ReactMarkdown> : m.text}
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+
+            {pending && (
+              <div className="flex gap-4">
+                <div className="w-9 h-9 rounded-xl bg-ai-500/10 text-ai-400 flex items-center justify-center flex-shrink-0 animate-pulse">
+                  <LuBot size={18} />
+                </div>
+                <div className="bg-white/5 border border-white/10 p-4 rounded-2xl rounded-tl-none text-sm text-text-muted">
+                  <span className="inline-flex gap-1">
+                    <span className="w-2 h-2 rounded-full bg-ai-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-2 h-2 rounded-full bg-ai-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-2 h-2 rounded-full bg-ai-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/30" ref={scrollRef}>
-          {messages.length === 0 && (
-            <div className="h-full flex flex-col items-center justify-center text-center opacity-60">
-              <FaNotesMedical className="text-6xl text-slate-300 mb-4" />
-              <h3 className="text-xl font-serif text-slate-700">How can I help your skin today?</h3>
-              <div className="mt-8 grid grid-cols-2 gap-3 w-full max-w-lg">
-                {suggestions.map((s, i) => (
-                  <button key={i} onClick={() => setInput(s)} className="p-3 text-sm text-left bg-white border border-slate-200 rounded-xl hover:border-indigo-300 hover:shadow-md transition-all text-slate-600">
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {messages.map((m, i) => (
-            <div key={i} className={`flex gap-4 ${m.who === 'You' ? 'flex-row-reverse' : ''}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 shadow-sm ${m.who === 'You' ? 'bg-slate-200 text-slate-600' : 'bg-indigo-600 text-white'}`}>
-                {m.who === 'You' ? <FaUser size={12} /> : <FaRobot size={14} />}
-              </div>
-              <div className={`max-w-[80%] p-4 rounded-2xl shadow-sm text-sm leading-relaxed ${m.who === 'You' ? 'bg-indigo-50 text-indigo-900 rounded-tr-none' : 'bg-white border border-slate-100 text-slate-700 rounded-tl-none'}`}>
-                {m.who === 'AI' ? <ReactMarkdown className="prose prose-sm">{m.text}</ReactMarkdown> : m.text}
-              </div>
-            </div>
-          ))}
-          {pending && (
-            <div className="flex gap-4">
-              <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center flex-shrink-0 animate-bounce"><FaRobot size={14} /></div>
-              <div className="bg-white border border-slate-100 p-4 rounded-2xl rounded-tl-none shadow-sm text-sm text-slate-400">Thinking...</div>
-            </div>
-          )}
-        </div>
-
-        {/* Input */}
-        <div className="p-4 bg-white dark:bg-slate-800 border-t border-slate-100">
-          <form onSubmit={send} className="relative">
-            <input
-              className="w-full pl-6 pr-14 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all shadow-inner"
-              placeholder="Ask about symptoms, treatments, or ingredients..."
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              disabled={pending}
-            />
-            <button
-              type="submit"
-              disabled={pending || !input.trim()}
-              className="absolute right-2 top-2 bottom-2 aspect-square bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white rounded-xl flex items-center justify-center transition-colors shadow-lg shadow-indigo-200"
-            >
-              <FaPaperPlane />
-            </button>
-          </form>
-        </div>
+          {/* Input */}
+          <div className="p-4 bg-surface-elevated/50 border-t border-white/10">
+            <form onSubmit={send} className="relative">
+              <input
+                className="w-full pl-5 pr-14 py-4 bg-white/5 border border-white/10 rounded-2xl focus:outline-none focus:ring-2 focus:ring-ai-500/30 focus:border-ai-500/50 focus:bg-white/10 transition-all text-text-primary placeholder:text-text-muted"
+                placeholder="Ask about symptoms, treatments, or ingredients..."
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                disabled={pending}
+              />
+              <button
+                type="submit"
+                disabled={pending || !input.trim()}
+                className="absolute right-2 top-2 bottom-2 aspect-square bg-ai-500 hover:bg-ai-600 disabled:bg-white/10 disabled:text-text-muted text-white rounded-xl flex items-center justify-center transition-all shadow-lg shadow-ai-500/20 disabled:shadow-none"
+              >
+                <LuSend size={18} />
+              </button>
+            </form>
+          </div>
+        </Card>
       </div>
 
       {/* Sidebar History (Desktop) */}
       <aside className="w-80 hidden xl:flex flex-col gap-4">
-        <div className="bg-white p-6 rounded-3xl shadow-lg border border-slate-100 h-full flex flex-col">
-          <h3 className="font-serif text-lg text-slate-800 mb-4 flex items-center gap-2">
-            <FaHistory className="text-slate-400" /> History
-          </h3>
-          <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+        <Card variant="glass" className="h-full p-6 flex flex-col" hover={false}>
+          <div className="flex items-center gap-2 mb-4">
+            <LuHistory className="text-text-tertiary" size={18} />
+            <CardTitle>History</CardTitle>
+          </div>
+          <div className="flex-1 overflow-y-auto space-y-2 pr-1">
             {sessions.map(s => (
-              <div key={s.session_id} className={`group p-3 rounded-xl border transition-all cursor-pointer relative ${selectedSession === s.session_id ? 'bg-indigo-50 border-indigo-200 shadow-sm' : 'bg-slate-50 border-transparent hover:bg-white hover:border-slate-200 hover:shadow-sm'}`} onClick={() => loadSession(s.session_id)}>
-                <div className="text-sm font-medium text-slate-700 truncate pr-6">{s.title}</div>
-                <div className="text-xs text-slate-400 mt-1">{new Date(s.created_at).toLocaleDateString()}</div>
+              <div
+                key={s.session_id}
+                className={`group p-3 rounded-xl border transition-all cursor-pointer relative ${selectedSession === s.session_id ? 'bg-ai-500/10 border-ai-500/30' : 'bg-white/5 border-transparent hover:bg-white/10 hover:border-white/10'}`}
+                onClick={() => loadSession(s.session_id)}
+              >
+                <div className="text-sm font-medium text-text-primary truncate pr-6">{s.title}</div>
+                <div className="text-xs text-text-muted mt-1">{new Date(s.created_at).toLocaleDateString()}</div>
                 <button
                   onClick={(e) => { e.stopPropagation(); deleteSession(s.session_id) }}
-                  className="absolute right-2 top-3 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute right-2 top-3 text-text-muted hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
                 >
-                  <FaTrashAlt size={12} />
+                  <LuTrash2 size={14} />
                 </button>
               </div>
             ))}
-            {sessions.length === 0 && <div className="text-slate-400 text-sm text-center py-10">No saved chats.</div>}
+            {sessions.length === 0 && <div className="text-text-muted text-sm text-center py-10">No saved chats.</div>}
           </div>
-        </div>
+        </Card>
       </aside>
     </div>
   )

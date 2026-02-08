@@ -104,11 +104,19 @@ wandb/
 
 # Datasets / prepared data (large)
 data/
+datasets/
+massive 2/
+massive/
+ham10000/
+isic_data/
+data 2/
+finalfitz17k/
+
+# Zip files (usually datasets)
+*.zip
 
 # Reports
 reports/current/
-datasets/
-data/
 *.jpg
 *.jpeg
 *.png

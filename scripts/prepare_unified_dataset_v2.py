@@ -1,451 +1,339 @@
 #!/usr/bin/env python3
 """
-Hierarchical Dataset Preparation (Server-Compatible Version)
-Supports datasets downloaded via server_setup.sh
-
-Sources (after running server_setup.sh):
-1. ISIC 2019 (~25k) - from datasets/isic_2019/
-2. HAM10000 (~10k) - from datasets/ham10000/
-3. DermNet (~19k) - from datasets/dermnet/
-4. Fitzpatrick17k (~16.5k) - from datasets/fitzpatrick/
-5. PAD-UFES-20 (~2.3k) - from datasets/pad_ufes/
-6. 20 Skin Diseases (~5k) - from datasets/skin20/
-7. Massive Skin Disease (~262k) - from datasets/massive/ (34 classes, balanced)
-
-Legacy paths (local development):
-- ISIC 2018, isic_data, dermnet_main, etc.
+Unified dataset preparation v2 - Fixed paths
 """
 import os
-import csv
 import shutil
-import json
 from pathlib import Path
+import pandas as pd
 from tqdm import tqdm
-from collections import Counter
-import argparse
+import random
+import json
 
-# Configuration
 DATASETS_DIR = Path("datasets")
-UNIFIED_DIR = Path("data/unified_train")
-VAL_DIR = Path("data/unified_val")
-VAL_SPLIT = 0.1  # 10% for validation
+OUTPUT_TRAIN = Path("data/unified_train")
+OUTPUT_VAL = Path("data/unified_val")
+VAL_SPLIT = 0.1
 
-# --- Hierarchical Structure ---
-HIERARCHY = {
-    "cancer": ["melanoma", "bcc", "scc", "ak"],
-    "benign": ["nevus", "seborrheic_keratosis", "angioma", "wart"],
-    "inflammatory": ["eczema", "psoriasis", "lichen_planus", "urticaria"],
-    "infectious": ["impetigo", "herpes", "candida", "scabies", "tinea"],
-    "pigmentary": ["vitiligo", "melasma", "hyperpigmentation"],
+# Disease label mapping
+DISEASE_MAP = {
+    # ISIC 2019
+    'MEL': 'melanoma',
+    'NV': 'nevus',
+    'BCC': 'bcc',
+    'AK': 'ak',
+    'BKL': 'seborrheic_keratosis',
+    'DF': 'dermatofibroma',
+    'VASC': 'angioma',
+    'SCC': 'scc',
+    
+    # HAM10000
+    'mel': 'melanoma',
+    'nv': 'nevus',
+    'bcc': 'bcc',
+    'akiec': 'ak',
+    'bkl': 'seborrheic_keratosis',
+    'df': 'dermatofibroma',
+    'vasc': 'angioma',
+    
+    # DermNet - normalize folder names
+    'Acne and Rosacea Photos': 'acne',
+    'Actinic Keratosis Basal Cell Carcinoma and other Malignant Lesions': 'ak',
+    'Atopic Dermatitis Photos': 'eczema',
+    'Bullous Disease Photos': 'bullous',
+    'Cellulitis Impetigo and other Bacterial Infections': 'impetigo',
+    'Eczema Photos': 'eczema',
+    'Exanthems and Drug Eruptions': 'drug_eruption',
+    'Hair Loss Photos Alopecia and other Hair Diseases': 'alopecia',
+    'Herpes HPV and other STDs Photos': 'herpes',
+    'Light Diseases and Disorders of Pigmentation': 'hyperpigmentation',
+    'Lupus and other Connective Tissue diseases': 'lupus',
+    'Melanoma Skin Cancer Nevi and Moles': 'melanoma',
+    'Nail Fungus and other Nail Disease': 'nail_fungus',
+    'Poison Ivy Photos and other Contact Dermatitis': 'dermatitis',
+    'Psoriasis pictures Lichen Planus and related diseases': 'psoriasis',
+    'Scabies Lyme Disease and other Infestations and Bites': 'scabies',
+    'Seborrheic Keratoses and other Benign Tumors': 'seborrheic_keratosis',
+    'Systemic Disease': 'systemic',
+    'Tinea Ringworm Candidiasis and other Fungal Infections': 'candida',
+    'Urticaria Hives': 'urticaria',
+    'Vascular Tumors': 'angioma',
+    'Vasculitis Photos': 'vasculitis',
+    'Warts Molluscum and other Viral Infections': 'viral',
+    
+    # Massive 2 Dataset Mapping
+    'Acne And Rosacea Photos': 'acne',
+    'Actinic Keratosis Basal Cell Carcinoma And Other Malignant Lesions': 'ak',
+    'Atopic Dermatitis Photos': 'eczema',
+    'Ba  Cellulitis': 'impetigo',
+    'Ba Impetigo': 'impetigo',
+    'Benign': 'benign',
+    'Bullous Disease Photos': 'bullous',
+    'Cellulitis Impetigo And Other Bacterial Infections': 'impetigo',
+    'Eczema Photos': 'eczema',
+    'Exanthems And Drug Eruptions': 'drug_eruption',
+    'Fu Athlete Foot': 'candida',
+    'Fu Nail Fungus': 'candida',
+    'Fu Ringworm': 'candida',
+    'Hair Loss Photos Alopecia And Other Hair Diseases': 'alopecia',
+    'Heathy': 'healthy',
+    'Herpes Hpv And Other Stds Photos': 'herpes',
+    'Light Diseases And Disorders Of Pigmentation': 'hyperpigmentation',
+    'Lupus And Other Connective Tissue Diseases': 'lupus',
+    'Malignant': 'malignant',
+    'Melanoma Skin Cancer Nevi And Moles': 'melanoma',
+    'Nail Fungus And Other Nail Disease': 'candida',
+    'Pa Cutaneous Larva Migrans': 'scabies',
+    'Poison Ivy Photos And Other Contact Dermatitis': 'dermatitis',
+    'Psoriasis Pictures Lichen Planus And Related Diseases': 'psoriasis',
+    'Rashes': 'rash',
+    'Scabies Lyme Disease And Other Infestations And Bites': 'scabies',
+    'Seborrheic Keratoses And Other Benign Tumors': 'seborrheic_keratosis',
+    'Systemic Disease': 'systemic',
+    'Tinea Ringworm Candidiasis And Other Fungal Infections': 'candida',
+    'Urticaria Hives': 'urticaria',
+    'Vascular Tumors': 'angioma',
+    'Vasculitis Photos': 'vasculitis',
+    'Vi Chickenpox': 'herpes',
+    'Vi Shingles': 'herpes',
+    'Warts Molluscum And Other Viral Infections': 'wart',
 }
 
-# Disease to Category mapping
-DISEASE_TO_CATEGORY = {}
-for cat, diseases in HIERARCHY.items():
-    for d in diseases:
-        DISEASE_TO_CATEGORY[d] = cat
-
-MAIN_DISEASES = set([d for cat in HIERARCHY.values() for d in cat])
-
-# ============================================================================
-# KEYWORD MAPPING for folder-based datasets
-# ============================================================================
-KEYWORD_TO_DISEASE = [
-    # Cancer
-    ("melanoma", "melanoma"), ("malignant melanoma", "melanoma"),
-    ("basal cell", "bcc"), ("bcc", "bcc"),
-    ("squamous cell", "scc"), ("scc", "scc"), ("keratoacanthoma", "scc"),
-    ("actinic", "ak"), ("actinic keratosis", "ak"),
-    # Benign
-    ("nevus", "nevus"), ("nevi", "nevus"), ("mole", "nevus"),
-    ("seborrheic keratosis", "seborrheic_keratosis"), ("seborrheic", "seborrheic_keratosis"),
-    ("angioma", "angioma"), ("hemangioma", "angioma"), ("vascular", "angioma"),
-    ("cherry angioma", "angioma"), ("port wine", "angioma"),
-    ("wart", "wart"), ("verruca", "wart"), ("papilloma", "wart"),
-    # Inflammatory
-    ("eczema", "eczema"), ("dermatitis", "eczema"), ("atopic", "eczema"),
-    ("psoriasis", "psoriasis"), ("plaque psoriasis", "psoriasis"),
-    ("lichen planus", "lichen_planus"), ("lichen", "lichen_planus"),
-    ("urticaria", "urticaria"), ("hives", "urticaria"),
-    # Infectious
-    ("impetigo", "impetigo"),
-    ("herpes", "herpes"), ("shingles", "herpes"), ("zoster", "herpes"),
-    ("candida", "candida"), ("candidiasis", "candida"), ("fungal", "candida"),
-    ("scabies", "scabies"), ("mite", "scabies"),
-    ("tinea", "tinea"), ("ringworm", "tinea"), ("dermatophyte", "tinea"),
-    # Pigmentary
-    ("vitiligo", "vitiligo"),
-    ("melasma", "melasma"),
-    ("hyperpigmentation", "hyperpigmentation"), ("hypopigmentation", "hyperpigmentation"),
-]
-
-# ============================================================================
-# DATASET PROCESSORS
-# ============================================================================
-
-class DatasetProcessor:
-    """Base class for dataset processing."""
+def process_massive2():
+    """Process the Massive 2 Dataset (262k images)"""
+    print("  Processing Massive 2 dataset...")
     
-    def __init__(self):
-        self.counts = Counter()
-        self.train_files = []
-        self.val_files = []
-    
-    def get_disease_from_text(self, text: str) -> str:
-        """Map text to disease using keywords."""
-        text_lower = text.lower()
-        for keyword, disease in KEYWORD_TO_DISEASE:
-            if keyword in text_lower:
-                return disease
-        return None
-    
-    def add_file(self, src: Path, disease: str, prefix: str):
-        """Add file to train or val set."""
-        if not src.exists() or disease not in MAIN_DISEASES:
-            return
-        
-        import random
-        is_val = random.random() < VAL_SPLIT
-        
-        entry = {
-            'src': src,
-            'disease': disease,
-            'prefix': prefix,
-        }
-        
-        if is_val:
-            self.val_files.append(entry)
-        else:
-            self.train_files.append(entry)
-        
-        self.counts[disease] += 1
-
-
-def process_isic_csv(processor: DatasetProcessor, csv_path: Path, img_dir: Path, prefix: str):
-    """Process ISIC-style CSV dataset."""
-    if not csv_path.exists():
-        print(f"  Skipping {prefix}: CSV not found at {csv_path}")
-        return
-    
-    # ISIC column mappings
-    cols = {
-        'MEL': 'melanoma', 'BCC': 'bcc', 'SCC': 'scc', 'AK': 'ak', 'AKIEC': 'ak',
-        'NV': 'nevus', 'BKL': 'seborrheic_keratosis', 'VASC': 'angioma', 'DF': 'angioma'
-    }
-    
-    print(f"  Processing {prefix}...")
-    with open(csv_path) as f:
-        for row in tqdm(csv.DictReader(f)):
-            for col, disease in cols.items():
-                try:
-                    if float(row.get(col, 0)) == 1.0:
-                        img_name = row.get('image', row.get('image_id', ''))
-                        
-                        # Try different extensions and paths
-                        for ext in ['.jpg', '.jpeg', '.png', '']:
-                            img_path = img_dir / f"{img_name}{ext}"
-                            if img_path.exists():
-                                processor.add_file(img_path, disease, prefix)
-                                break
-                        break
-                except (ValueError, KeyError):
-                    continue
-
-
-def process_ham10000(processor: DatasetProcessor, base_dir: Path):
-    """Process HAM10000 dataset."""
-    csv_path = base_dir / "HAM10000_metadata.csv"
-    
-    if not csv_path.exists():
-        # Try alternate path
-        csv_path = base_dir / "hmnist_28_28_RGB.csv"
-        if not csv_path.exists():
-            print(f"  Skipping HAM10000: metadata not found")
-            return
-    
-    print(f"  Processing HAM10000...")
-    
-    # Find image directories
-    img_dirs = [
-        base_dir / "HAM10000_images_part_1",
-        base_dir / "HAM10000_images_part_2",
-        base_dir,
+    # Try multiple possible paths for Massive 2
+    massive_paths = [
+        Path("massive 2/balanced_dataset/balanced_dataset"),
+        Path("massive_2/balanced_dataset/balanced_dataset"),
+        DATASETS_DIR / "massive 2" / "balanced_dataset" / "balanced_dataset",
+        Path("/Users/gopal/Skin-Doc/massive 2/balanced_dataset/balanced_dataset")
     ]
     
-    dx_mapping = {
-        'mel': 'melanoma', 'bcc': 'bcc', 'akiec': 'ak',
-        'nv': 'nevus', 'bkl': 'seborrheic_keratosis', 'vasc': 'angioma', 'df': 'angioma'
-    }
-    
-    with open(csv_path) as f:
-        for row in tqdm(csv.DictReader(f)):
-            dx = row.get('dx', '').lower()
-            disease = dx_mapping.get(dx)
-            if not disease:
-                continue
+    source_dir = None
+    for p in massive_paths:
+        if p.exists():
+            source_dir = p
+            break
             
-            img_name = row.get('image_id', '')
-            for img_dir in img_dirs:
-                for ext in ['.jpg', '.jpeg', '.png']:
-                    img_path = img_dir / f"{img_name}{ext}"
-                    if img_path.exists():
-                        processor.add_file(img_path, disease, "ham")
-                        break
-
-
-def process_folder_dataset(processor: DatasetProcessor, base_dir: Path, prefix: str):
-    """Process folder-organized dataset."""
-    if not base_dir.exists():
-        print(f"  Skipping {prefix}: not found at {base_dir}")
-        return
-    
-    print(f"  Processing {prefix}...")
-    
-    for root, dirs, files in os.walk(base_dir):
-        folder_name = Path(root).name.lower()
+    if not source_dir:
+        print("  Skipping Massive 2: Directory not found")
+        return []
         
-        # Try to match folder name to disease
-        disease = processor.get_disease_from_text(folder_name)
-        if not disease:
-            # Try parent folder
-            disease = processor.get_disease_from_text(Path(root).parent.name.lower())
+    samples = []
+    for disease_folder in source_dir.iterdir():
+        if not disease_folder.is_dir():
+            continue
+            
+        label = DISEASE_MAP.get(disease_folder.name)
+        if not label:
+            # Try fuzzy match or skip
+            continue
+            
+        for img_path in disease_folder.glob("*.jpg"):
+            samples.append((img_path, label))
+            
+    print(f"    Found {len(samples)} images from Massive 2")
+    return samples
+
+def process_isic2019():
+    """Process ISIC 2019 with FIXED CSV path"""
+    print("  Processing ISIC 2019...")
+    
+    csv_path = DATASETS_DIR / "isic_data" / "isic_2019" / "ISIC_2019_Training_GroundTruth.csv"
+    images_dir = DATASETS_DIR / "isic_data" / "isic_2019" / "ISIC_2019_Training_Input"
+    
+    if not csv_path.exists():
+        print(f"  Skipping ISIC 2019: CSV not found at {csv_path}")
+        return []
+    
+    df = pd.read_csv(csv_path)
+    samples = []
+    
+    for _, row in tqdm(df.iterrows(), total=len(df)):
+        img_name = row['image']
+        
+        # Find actual disease column
+        disease_cols = [col for col in df.columns if col != 'image']
+        disease = None
+        for col in disease_cols:
+            if row[col] == 1.0:
+                disease = DISEASE_MAP.get(col, col.lower())
+                break
         
         if disease:
-            for f in files:
-                if f.lower().endswith(('.jpg', '.jpeg', '.png')) and not f.startswith('.'):
-                    processor.add_file(Path(root) / f, disease, prefix)
+            img_path = images_dir / f"{img_name}.jpg"
+            if img_path.exists():
+                samples.append((img_path, disease))
+    
+    print(f"    Found {len(samples)} images")
+    return samples
 
+def process_ham10000():
+    """Process HAM10000"""
+    print("  Processing HAM10000...")
+    
+    csv_path = DATASETS_DIR / "ham10000" / "HAM10000_metadata.csv"
+    images_dir1 = DATASETS_DIR / "ham10000" / "HAM10000_images_part_1"
+    images_dir2 = DATASETS_DIR / "ham10000" / "HAM10000_images_part_2"
+    
+    if not csv_path.exists():
+        print(f"  Skipping HAM10000: CSV not found")
+        return []
+    
+    df = pd.read_csv(csv_path)
+    samples = []
+    
+    for _, row in tqdm(df.iterrows(), total=len(df)):
+        img_id = row['image_id']
+        disease = DISEASE_MAP.get(row['dx'], row['dx'])
+        
+        img_path = images_dir1 / f"{img_id}.jpg"
+        if not img_path.exists():
+            img_path = images_dir2 / f"{img_id}.jpg"
+        
+        if img_path.exists():
+            samples.append((img_path, disease))
+    
+    print(f"    Found {len(samples)} images")
+    return samples
 
-def process_skin20(processor: DatasetProcessor, base_dir: Path):
-    """Process 20 Skin Diseases dataset with specific folder mapping."""
-    if not base_dir.exists():
-        print(f"  Skipping skin20: not found")
-        return
+def process_dermnet():
+    """Process DermNet with FIXED path"""
+    print("  Processing DermNet...")
     
-    print(f"  Processing skin20...")
+    dermnet_dir = DATASETS_DIR / "dermnet_main"
     
-    # Specific mappings for skin20 dataset folders
-    folder_mapping = {
-        'actinic keratosis': 'ak',
-        'basal cell carcinoma': 'bcc',
-        'melanoma': 'melanoma',
-        'squamous cell carcinoma': 'scc',
-        'nevus': 'nevus',
-        'benign keratosis': 'seborrheic_keratosis',
-        'vascular lesion': 'angioma',
-        'warts': 'wart',
-        'eczema': 'eczema',
-        'psoriasis': 'psoriasis',
-        'lichen planus': 'lichen_planus',
-        'urticaria': 'urticaria',
-        'scabies': 'scabies',
-        'herpes': 'herpes',
-        'vitiligo': 'vitiligo',
-        'melasma': 'melasma',
-    }
+    if not dermnet_dir.exists():
+        print(f"  Skipping DermNet: not found at {dermnet_dir}")
+        return []
     
-    for train_or_test in ['train', 'test', 'Train', 'Test']:
-        train_dir = base_dir / train_or_test
-        if not train_dir.exists():
+    samples = []
+    
+    for split in ['train', 'test']:
+        split_dir = dermnet_dir / split
+        if not split_dir.exists():
             continue
-        
-        for folder in train_dir.iterdir():
-            if not folder.is_dir():
+            
+        for disease_folder in split_dir.iterdir():
+            if not disease_folder.is_dir():
                 continue
+                
+            disease = DISEASE_MAP.get(disease_folder.name, disease_folder.name.lower())
             
-            folder_lower = folder.name.lower()
-            disease = folder_mapping.get(folder_lower)
-            
-            if not disease:
-                disease = processor.get_disease_from_text(folder_lower)
-            
-            if disease:
-                for img in folder.iterdir():
-                    if img.suffix.lower() in ['.jpg', '.jpeg', '.png']:
-                        processor.add_file(img, disease, "skin20")
-
-
-def process_pad_ufes(processor: DatasetProcessor, base_dir: Path):
-    """Process PAD-UFES-20 dataset."""
-    csv_path = base_dir / "metadata.csv"
-    img_dir = base_dir / "images"
+            for img_path in disease_folder.glob("*.jpg"):
+                samples.append((img_path, disease))
+            for img_path in disease_folder.glob("*.png"):
+                samples.append((img_path, disease))
     
-    # Try alternate structure
-    if not csv_path.exists():
-        for f in base_dir.rglob("*.csv"):
-            csv_path = f
-            img_dir = f.parent / "images" if (f.parent / "images").exists() else f.parent
-            break
-    
-    if not csv_path.exists():
-        print(f"  Skipping PAD-UFES: metadata not found")
-        return
-    
-    print(f"  Processing PAD-UFES...")
-    
-    # PAD-UFES diagnosis mapping
-    dx_mapping = {
-        'mel': 'melanoma', 'bcc': 'bcc', 'scc': 'scc', 'ack': 'ak',
-        'nev': 'nevus', 'sek': 'seborrheic_keratosis',
-    }
-    
-    with open(csv_path) as f:
-        for row in tqdm(csv.DictReader(f)):
-            dx = row.get('diagnostic', row.get('diagnosis', '')).lower()[:3]
-            disease = dx_mapping.get(dx)
-            if disease:
-                img_name = row.get('img_id', row.get('image_id', ''))
-                for ext in ['.png', '.jpg', '.jpeg']:
-                    img_path = img_dir / f"{img_name}{ext}"
-                    if img_path.exists():
-                        processor.add_file(img_path, disease, "pad")
-                        break
-
-
-def create_symlinks(processor: DatasetProcessor, output_dir: Path, files: list, name: str):
-    """Create symlinks for processed files."""
-    print(f"  Creating {name} set ({len(files)} files)...")
-    
-    for entry in tqdm(files):
-        src = entry['src']
-        disease = entry['disease']
-        prefix = entry['prefix']
-        
-        dest_dir = output_dir / disease
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        
-        dest = dest_dir / f"{prefix}_{src.name}"
-        
-        try:
-            if dest.exists():
-                dest.unlink()
-            os.symlink(src.resolve(), dest)
-        except Exception as e:
-            pass
-
-
-def save_hierarchy(output_dir: Path):
-    """Save hierarchy metadata."""
-    meta = {
-        "hierarchy": HIERARCHY,
-        "categories": list(HIERARCHY.keys()),
-        "diseases": list(MAIN_DISEASES),
-        "disease_to_category": DISEASE_TO_CATEGORY,
-    }
-    
-    with open(output_dir / "hierarchy.json", 'w') as f:
-        json.dump(meta, f, indent=2)
-
+    print(f"    Found {len(samples)} images")
+    return samples
 
 def main():
-    parser = argparse.ArgumentParser(description="Prepare unified skin disease dataset")
-    parser.add_argument("--datasets-dir", type=str, default="datasets", help="Datasets directory")
-    parser.add_argument("--output-dir", type=str, default="data/unified_train", help="Output directory")
-    parser.add_argument("--val-dir", type=str, default="data/unified_val", help="Validation directory")
-    parser.add_argument("--val-split", type=float, default=0.1, help="Validation split ratio")
-    args = parser.parse_args()
-    
-    global DATASETS_DIR, UNIFIED_DIR, VAL_DIR, VAL_SPLIT
-    DATASETS_DIR = Path(args.datasets_dir)
-    UNIFIED_DIR = Path(args.output_dir)
-    VAL_DIR = Path(args.val_dir)
-    VAL_SPLIT = args.val_split
-    
-    print("="*60)
-    print("SKIN DISEASE DATASET PREPARATION")
-    print("="*60)
+    print("=" * 60)
+    print("SKIN DISEASE DATASET PREPARATION - FIXED PATHS")
+    print("=" * 60)
     print(f"Datasets dir: {DATASETS_DIR}")
-    print(f"Output dir: {UNIFIED_DIR}")
-    print(f"Val dir: {VAL_DIR}")
+    print(f"Output dir: {OUTPUT_TRAIN}")
+    print(f"Val dir: {OUTPUT_VAL}")
     print(f"Val split: {VAL_SPLIT}")
     print()
     
     # Clean output directories
     print("Cleaning output directories...")
-    if UNIFIED_DIR.exists():
-        shutil.rmtree(UNIFIED_DIR)
-    if VAL_DIR.exists():
-        shutil.rmtree(VAL_DIR)
+    shutil.rmtree(OUTPUT_TRAIN, ignore_errors=True)
+    shutil.rmtree(OUTPUT_VAL, ignore_errors=True)
+    OUTPUT_TRAIN.mkdir(parents=True, exist_ok=True)
+    OUTPUT_VAL.mkdir(parents=True, exist_ok=True)
+    print()
     
-    UNIFIED_DIR.mkdir(parents=True, exist_ok=True)
-    VAL_DIR.mkdir(parents=True, exist_ok=True)
+    # Process all datasets
+    print("Processing datasets...")
+    all_samples = []
     
-    # Process datasets
-    processor = DatasetProcessor()
+    all_samples.extend(process_isic2019())
+    all_samples.extend(process_ham10000())
+    all_samples.extend(process_dermnet())
+    all_samples.extend(process_massive2())
     
-    print("\nProcessing datasets...")
+    print()
     
-    # SERVER PATHS (primary, from server_setup.sh)
-    process_isic_csv(processor, 
-                    DATASETS_DIR / "isic_2019/ISIC_2019_Training_GroundTruth.csv",
-                    DATASETS_DIR / "isic_2019/ISIC_2019_Training_Input",
-                    "isic19")
+    # Shuffle and split
+    random.shuffle(all_samples)
+    val_size = int(len(all_samples) * VAL_SPLIT)
+    train_samples = all_samples[val_size:]
+    val_samples = all_samples[:val_size]
     
-    process_ham10000(processor, DATASETS_DIR / "ham10000")
-    process_folder_dataset(processor, DATASETS_DIR / "dermnet/train", "dermnet")
-    process_skin20(processor, DATASETS_DIR / "skin20")
-    process_pad_ufes(processor, DATASETS_DIR / "pad_ufes")
+    print("Creating datasets...")
     
-    # LEGACY LOCAL PATHS (for backward compatibility)
-    process_isic_csv(processor,
-                    DATASETS_DIR / "isic_data/isic_2019/ISIC_2019_Training_GroundTruth.csv",
-                    DATASETS_DIR / "isic_data/isic_2019/ISIC_2019_Training_Input",
-                    "isic19_local")
+    # Copy train samples
+    print(f"  Creating train set ({len(train_samples)} files)...")
+    for img_path, disease in tqdm(train_samples):
+        disease_dir = OUTPUT_TRAIN / disease
+        disease_dir.mkdir(exist_ok=True)
+        shutil.copy2(img_path, disease_dir / img_path.name)
     
-    process_isic_csv(processor,
-                    DATASETS_DIR / "ISIC2018_Task3_Training_Input/ISIC2018_Task3_Training_GroundTruth/ISIC2018_Task3_Training_GroundTruth.csv",
-                    DATASETS_DIR / "ISIC2018_Task3_Training_Input",
-                    "isic18")
+    # Copy val samples
+    print(f"  Creating val set ({len(val_samples)} files)...")
+    for img_path, disease in tqdm(val_samples):
+        disease_dir = OUTPUT_VAL / disease
+        disease_dir.mkdir(exist_ok=True)
+        shutil.copy2(img_path, disease_dir / img_path.name)
     
-    process_folder_dataset(processor, DATASETS_DIR / "dermnet_main/train", "dermnet_local")
-    process_folder_dataset(processor, DATASETS_DIR / "diverse_derm", "diverse")
-    
-    # Fitzpatrick (check multiple paths)
-    fitz_paths = [
-        (DATASETS_DIR / "fitzpatrick", DATASETS_DIR / "fitzpatrick"),
-        (DATASETS_DIR / "data/fitzpatrick17k.csv", DATASETS_DIR / "data/finalfitz17k"),
-    ]
-    for csv_path, img_dir in fitz_paths:
-        if csv_path.exists():
-            # Process Fitzpatrick specially
-            process_folder_dataset(processor, img_dir, "fitz")
-            break
-    
-    # MASSIVE SKIN DISEASE DATASET (262K images, 34 classes, balanced)
-    # This is our largest dataset with excellent coverage
-    massive_dir = DATASETS_DIR / "massive"
-    if massive_dir.exists():
-        print("  Processing Massive dataset (this may take a while)...")
-        process_folder_dataset(processor, massive_dir, "massive")
-    
-    # Create symlinks
-    print("\nCreating datasets...")
-    create_symlinks(processor, UNIFIED_DIR, processor.train_files, "train")
-    create_symlinks(processor, VAL_DIR, processor.val_files, "val")
-    
-    # Save hierarchy
-    save_hierarchy(UNIFIED_DIR)
-    save_hierarchy(VAL_DIR)
-    
-    # Print summary
-    print("\n" + "="*60)
+    # Summary
+    print()
+    print("=" * 60)
     print("DATASET SUMMARY")
-    print("="*60)
+    print("=" * 60)
+    print()
+    print(f"Total samples: {len(all_samples)}")
+    print(f"Train samples: {len(train_samples)}")
+    print(f"Val samples: {len(val_samples)}")
+    print()
     
-    print(f"\nTotal samples: {len(processor.train_files) + len(processor.val_files)}")
-    print(f"Train samples: {len(processor.train_files)}")
-    print(f"Val samples: {len(processor.val_files)}")
+    # Per-disease counts
+    disease_counts = {}
+    for _, disease in all_samples:
+        disease_counts[disease] = disease_counts.get(disease, 0) + 1
     
-    print("\nPer-disease counts:")
-    for disease in sorted(MAIN_DISEASES):
-        count = processor.counts.get(disease, 0)
+    print("Per-disease counts:")
+    for disease in sorted(disease_counts.keys()):
+        count = disease_counts[disease]
         status = "✅" if count >= 500 else "⚠️" if count >= 100 else "❌"
         print(f"  {status} {disease}: {count}")
     
-    print(f"\nFiles saved to:")
-    print(f"  Train: {UNIFIED_DIR}")
-    print(f"  Val: {VAL_DIR}")
+    print()
+    print("Files saved to:")
+    print(f"  Train: {OUTPUT_TRAIN}")
+    print(f"  Val: {OUTPUT_VAL}")
 
+    # Save hierarchy.json
+    hierarchy = {
+        "categories": ["cancer", "benign", "inflammatory", "infectious", "pigmentary"],
+        "diseases": [
+            "melanoma", "bcc", "scc", "ak", 
+            "nevus", "seborrheic_keratosis", "angioma", "wart", "benign",
+            "eczema", "psoriasis", "lichen_planus", "urticaria", "acne", "alopecia", "rosacea",
+            "impetigo", "herpes", "candida", "scabies", "viral", "bacterial", "fungal",
+            "vitiligo", "melasma", "hyperpigmentation"
+        ],
+        "disease_to_category": {
+            "melanoma": "cancer", "bcc": "cancer", "scc": "cancer", "ak": "cancer",
+            "nevus": "benign", "seborrheic_keratosis": "benign", "angioma": "benign", "wart": "benign", "benign": "benign",
+            "eczema": "inflammatory", "psoriasis": "inflammatory", "lichen_planus": "inflammatory", "urticaria": "inflammatory", 
+            "acne": "inflammatory", "alopecia": "inflammatory", "rosacea": "inflammatory",
+            "impetigo": "infectious", "herpes": "infectious", "candida": "infectious", "scabies": "infectious", 
+            "viral": "infectious", "bacterial": "infectious", "fungal": "infectious",
+            "vitiligo": "pigmentary", "melasma": "pigmentary", "hyperpigmentation": "pigmentary"
+        }
+    }
+    
+    with open(OUTPUT_TRAIN / "hierarchy.json", "w") as f:
+        json.dump(hierarchy, f, indent=2)
+    with open(OUTPUT_VAL / "hierarchy.json", "w") as f:
+        json.dump(hierarchy, f, indent=2)
+    print("  Created hierarchy.json in output directories.")
 
 if __name__ == "__main__":
     main()

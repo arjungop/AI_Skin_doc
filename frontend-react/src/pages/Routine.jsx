@@ -1,17 +1,16 @@
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Sun, Moon, Check, Trash2, Trophy, Flame, Droplets } from 'lucide-react'
+import { LuPlus, LuSun, LuMoon, LuCheck, LuTrash2, LuTrophy, LuFlame, LuDroplets, LuX } from 'react-icons/lu'
 import { api } from '../services/api'
+import { Card, CardTitle, CardDescription, IconWrapper, CardBadge } from '../components/Card'
 import confetti from 'canvas-confetti'
 
 export default function Routine() {
     const [items, setItems] = useState([])
     const [loading, setLoading] = useState(true)
-    const [view, setView] = useState('AM') // 'AM' | 'PM'
-    const [completions, setCompletions] = useState([]) // IDs of completed items for today
+    const [view, setView] = useState('AM')
+    const [completions, setCompletions] = useState([])
     const [streak, setStreak] = useState(0)
-
-    // Add Item State
     const [showAdd, setShowAdd] = useState(false)
     const [newItemName, setNewItemName] = useState('')
     const [newItemTime, setNewItemTime] = useState('AM')
@@ -19,7 +18,6 @@ export default function Routine() {
     useEffect(() => {
         fetchRoutine()
         fetchCompletions()
-        // Mock streak for demo
         setStreak(Math.floor(Math.random() * 5) + 3)
     }, [])
 
@@ -44,7 +42,7 @@ export default function Routine() {
 
     const toggleComplete = async (itemId) => {
         const isCompleted = completions.includes(itemId)
-        if (isCompleted) return // For now, only allowing check, not uncheck in this simple version
+        if (isCompleted) return
 
         try {
             await api.checkRoutineItem({
@@ -54,7 +52,6 @@ export default function Routine() {
             })
             setCompletions(prev => [...prev, itemId])
 
-            // Trigger generic confetti if all items in current view are done
             const currentViewItems = items.filter(i => i.time_of_day === view || i.time_of_day === 'BOTH')
             const completedCount = currentViewItems.filter(i => completions.includes(i.item_id) || i.item_id === itemId).length
 
@@ -63,7 +60,7 @@ export default function Routine() {
                     particleCount: 100,
                     spread: 70,
                     origin: { y: 0.6 },
-                    colors: view === 'AM' ? ['#f59e0b', '#fbbf24', '#ffffff'] : ['#6366f1', '#818cf8', '#ffffff']
+                    colors: view === 'AM' ? ['#00D4AA', '#10B981', '#ffffff'] : ['#8B5CF6', '#A78BFA', '#ffffff']
                 })
             }
         } catch (err) {
@@ -101,178 +98,193 @@ export default function Routine() {
     const currentItems = items.filter(i => i.time_of_day === view || i.time_of_day === 'BOTH')
 
     return (
-        <div className="p-6 max-w-5xl mx-auto space-y-8">
-            {/* Header with Streak */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                <div>
-                    <h1 className="text-3xl font-serif text-slate-900 font-medium">Daily Routine</h1>
-                    <p className="text-slate-500 mt-1">Consistency is key to healthy skin.</p>
-                </div>
-
-                <div className="flex items-center gap-4 bg-white px-6 py-3 rounded-2xl shadow-sm border border-slate-100">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center text-orange-500">
-                            <Flame className="w-5 h-5 fill-current" />
-                        </div>
-                        <div>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Streak</p>
-                            <p className="text-xl font-bold text-slate-900">{streak} Days</p>
-                        </div>
-                    </div>
-                    <div className="w-px h-8 bg-slate-100 mx-2"></div>
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-500">
-                            <Droplets className="w-5 h-5 fill-current" />
-                        </div>
-                        <div>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Hydration</p>
-                            <p className="text-xl font-bold text-slate-900">Good</p>
-                        </div>
-                    </div>
-                </div>
+        <div className="relative min-h-screen pb-12">
+            {/* Ambient Background */}
+            <div className="fixed inset-0 pointer-events-none z-0">
+                <div className="absolute top-20 left-1/3 w-[500px] h-[500px] bg-primary-500/10 rounded-full blur-[120px] opacity-40" />
+                <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-accent-500/10 rounded-full blur-[100px] opacity-30" />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-                {/* Main List */}
-                <div className="lg:col-span-2 space-y-6">
-                    {/* Toggle */}
-                    <div className="bg-slate-100 p-1 rounded-xl flex items-center">
-                        <button
-                            onClick={() => setView('AM')}
-                            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-bold transition-all ${view === 'AM' ? 'bg-white text-orange-500 shadow-sm' : 'text-slate-500 hover:text-slate-600'}`}
-                        >
-                            <Sun className="w-4 h-4" />
-                            Morning
-                        </button>
-                        <button
-                            onClick={() => setView('PM')}
-                            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-bold transition-all ${view === 'PM' ? 'bg-white text-indigo-500 shadow-sm' : 'text-slate-500 hover:text-slate-600'}`}
-                        >
-                            <Moon className="w-4 h-4" />
-                            Evening
-                        </button>
+            <div className="relative z-10 max-w-5xl mx-auto space-y-8">
+                {/* Header with Streak */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 lg:pr-72">
+                    <div>
+                        <h1 className="text-4xl md:text-5xl font-bold text-text-primary tracking-tight">Daily Routine</h1>
+                        <p className="text-text-tertiary mt-2 text-lg">Consistency is key to healthy skin</p>
                     </div>
 
-                    <div className="space-y-3">
-                        <AnimatePresence mode='popLayout'>
-                            {currentItems.map((item, i) => {
-                                const isDone = completions.includes(item.item_id)
-                                return (
-                                    <motion.div
-                                        key={item.item_id}
-                                        initial={{ opacity: 0, x: -20 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        exit={{ opacity: 0, scale: 0.9 }}
-                                        transition={{ delay: i * 0.05 }}
-                                        className={`group flex items-center justify-between p-4 rounded-xl border transition-all ${isDone ? 'bg-green-50 border-green-100' : 'bg-white border-slate-100 hover:border-slate-200 hover:shadow-sm'}`}
-                                    >
-                                        <div className="flex items-center gap-4">
-                                            <button
-                                                onClick={() => toggleComplete(item.item_id)}
-                                                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${isDone ? 'bg-green-500 text-white scale-110' : 'bg-slate-100 text-slate-300 hover:bg-slate-200'}`}
-                                            >
-                                                <Check className="w-5 h-5" />
-                                            </button>
-                                            <div>
-                                                <h3 className={`font-medium ${isDone ? 'text-green-800 line-through opacity-70' : 'text-slate-900'}`}>{item.product_name}</h3>
-                                                <p className="text-xs text-slate-400 capitalize">{item.time_of_day === 'BOTH' ? 'Any time' : item.time_of_day}</p>
-                                            </div>
-                                        </div>
-                                        <button
-                                            onClick={() => deleteItem(item.item_id)}
-                                            className="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                    </motion.div>
-                                )
-                            })}
-                        </AnimatePresence>
-
-                        {/* Add New Button */}
-                        {!showAdd ? (
-                            <button
-                                onClick={() => setShowAdd(true)}
-                                className="w-full py-4 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 font-medium hover:border-amber-400 hover:text-amber-500 hover:bg-amber-50 transition-all flex items-center justify-center gap-2"
-                            >
-                                <Plus className="w-5 h-5" />
-                                Add Product
-                            </button>
-                        ) : (
-                            <motion.form
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex gap-2"
-                                onSubmit={addItem}
-                            >
-                                <input
-                                    type="text"
-                                    placeholder="Product name (e.g. Vitamin C Serum)"
-                                    className="flex-1 rounded-lg border-slate-300 focus:border-amber-500 focus:ring-amber-500/20 text-sm"
-                                    value={newItemName}
-                                    onChange={e => setNewItemName(e.target.value)}
-                                    autoFocus
-                                />
-                                <select
-                                    className="rounded-lg border-slate-300 text-sm"
-                                    value={newItemTime}
-                                    onChange={e => setNewItemTime(e.target.value)}
-                                >
-                                    <option value="AM">AM</option>
-                                    <option value="PM">PM</option>
-                                    <option value="BOTH">Both</option>
-                                </select>
-                                <button type="submit" className="bg-slate-900 text-white px-4 rounded-lg font-medium text-sm">Add</button>
-                                <button type="button" onClick={() => setShowAdd(false)} className="p-2 text-slate-500 hover:bg-slate-200 rounded-lg">
-                                    <X className="w-5 h-5" />
-                                </button>
-                            </motion.form>
-                        )}
-                    </div>
+                    <Card variant="glass" className="px-6 py-4 flex items-center gap-6" hover={false}>
+                        <div className="flex items-center gap-3">
+                            <IconWrapper variant="accent" size="md">
+                                <LuFlame size={20} />
+                            </IconWrapper>
+                            <div>
+                                <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">Streak</p>
+                                <p className="text-xl font-bold text-gradient-primary">{streak} Days</p>
+                            </div>
+                        </div>
+                        <div className="w-px h-10 bg-white/10" />
+                        <div className="flex items-center gap-3">
+                            <IconWrapper variant="ai" size="md">
+                                <LuDroplets size={20} />
+                            </IconWrapper>
+                            <div>
+                                <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">Hydration</p>
+                                <p className="text-xl font-bold text-primary-400">Good</p>
+                            </div>
+                        </div>
+                    </Card>
                 </div>
 
-                {/* Sidebar info */}
-                <div className="space-y-6">
-                    <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-6 text-white shadow-lg overflow-hidden relative">
-                        <div className="relative z-10">
-                            <h3 className="font-serif text-xl mb-2">Did you know?</h3>
-                            <p className="text-white/80 text-sm leading-relaxed">
-                                Consistent application of sunscreen is the #1 anti-aging secret. Even on cloudy days, UV rays penetrate the skin.
-                            </p>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Main List */}
+                    <div className="lg:col-span-2 space-y-6">
+                        {/* Toggle */}
+                        <div className="bg-surface-elevated p-1.5 rounded-2xl flex items-center border border-white/10">
+                            <button
+                                onClick={() => setView('AM')}
+                                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all ${view === 'AM' ? 'bg-primary-500/10 text-primary-400 border border-primary-500/30' : 'text-text-secondary hover:text-text-primary'}`}
+                            >
+                                <LuSun size={18} />
+                                Morning
+                            </button>
+                            <button
+                                onClick={() => setView('PM')}
+                                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all ${view === 'PM' ? 'bg-accent-500/10 text-accent-400 border border-accent-500/30' : 'text-text-secondary hover:text-text-primary'}`}
+                            >
+                                <LuMoon size={18} />
+                                Evening
+                            </button>
                         </div>
-                        <div className="absolute -bottom-6 -right-6 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
-                        <div className="absolute top-0 right-0 p-4 opacity-20">
-                            <Sun className="w-12 h-12" />
+
+                        <div className="space-y-3">
+                            <AnimatePresence mode='popLayout'>
+                                {currentItems.map((item, i) => {
+                                    const isDone = completions.includes(item.item_id)
+                                    return (
+                                        <motion.div
+                                            key={item.item_id}
+                                            initial={{ opacity: 0, x: -20 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            exit={{ opacity: 0, scale: 0.9 }}
+                                            transition={{ delay: i * 0.05 }}
+                                        >
+                                            <Card
+                                                variant={isDone ? "glass" : "elevated"}
+                                                className={`p-4 flex items-center justify-between group ${isDone ? 'border-primary-500/30 bg-primary-500/5' : ''}`}
+                                                hover={!isDone}
+                                            >
+                                                <div className="flex items-center gap-4">
+                                                    <motion.button
+                                                        whileHover={{ scale: 1.1 }}
+                                                        whileTap={{ scale: 0.9 }}
+                                                        onClick={() => toggleComplete(item.item_id)}
+                                                        className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${isDone ? 'bg-primary-500 text-white' : 'bg-white/5 border border-white/10 text-text-muted hover:border-primary-500/30 hover:text-primary-400'}`}
+                                                    >
+                                                        <LuCheck size={20} />
+                                                    </motion.button>
+                                                    <div>
+                                                        <h3 className={`font-semibold ${isDone ? 'text-primary-400 line-through opacity-70' : 'text-text-primary'}`}>{item.product_name}</h3>
+                                                        <p className="text-xs text-text-muted capitalize">{item.time_of_day === 'BOTH' ? 'Any time' : item.time_of_day}</p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => deleteItem(item.item_id)}
+                                                    className="p-2 text-text-muted hover:text-danger opacity-0 group-hover:opacity-100 transition-all"
+                                                >
+                                                    <LuTrash2 size={18} />
+                                                </button>
+                                            </Card>
+                                        </motion.div>
+                                    )
+                                })}
+                            </AnimatePresence>
+
+                            {/* Add New Button */}
+                            {!showAdd ? (
+                                <motion.button
+                                    whileHover={{ scale: 1.01 }}
+                                    whileTap={{ scale: 0.99 }}
+                                    onClick={() => setShowAdd(true)}
+                                    className="w-full py-4 border-2 border-dashed border-white/10 rounded-2xl text-text-muted font-medium hover:border-primary-500/30 hover:text-primary-400 hover:bg-primary-500/5 transition-all flex items-center justify-center gap-2"
+                                >
+                                    <LuPlus size={20} />
+                                    Add Product
+                                </motion.button>
+                            ) : (
+                                <motion.form
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="p-4 rounded-2xl border border-white/10 bg-surface-elevated flex gap-3"
+                                    onSubmit={addItem}
+                                >
+                                    <input
+                                        type="text"
+                                        placeholder="Product name (e.g. Vitamin C Serum)"
+                                        className="flex-1 rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-text-primary placeholder:text-text-muted focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all text-sm"
+                                        value={newItemName}
+                                        onChange={e => setNewItemName(e.target.value)}
+                                        autoFocus
+                                    />
+                                    <select
+                                        className="rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-text-primary text-sm"
+                                        value={newItemTime}
+                                        onChange={e => setNewItemTime(e.target.value)}
+                                    >
+                                        <option value="AM">AM</option>
+                                        <option value="PM">PM</option>
+                                        <option value="BOTH">Both</option>
+                                    </select>
+                                    <button type="submit" className="btn-primary px-5">Add</button>
+                                    <button type="button" onClick={() => setShowAdd(false)} className="p-3 text-text-muted hover:bg-white/5 rounded-xl">
+                                        <LuX size={20} />
+                                    </button>
+                                </motion.form>
+                            )}
                         </div>
                     </div>
 
-                    <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
-                        <h3 className="font-medium text-slate-900 mb-4 flex items-center gap-2">
-                            <Trophy className="w-4 h-4 text-amber-500" />
-                            Achievements
-                        </h3>
-                        <div className="space-y-4">
-                            <div className="flex items-center gap-3 opacity-50">
-                                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-xl">🌱</div>
-                                <div>
-                                    <p className="text-sm font-medium text-slate-800">7 Day Streak</p>
-                                    <div className="w-32 h-1.5 bg-slate-100 rounded-full mt-1 overflow-hidden">
-                                        <div className="h-full bg-green-500 w-[60%]"></div>
+                    {/* Sidebar info */}
+                    <div className="space-y-6">
+                        <Card variant="gradient" className="p-6 text-white overflow-hidden relative">
+                            <div className="relative z-10">
+                                <h3 className="text-xl font-bold mb-2">Did you know?</h3>
+                                <p className="text-white/80 text-sm leading-relaxed">
+                                    Consistent application of sunscreen is the #1 anti-aging secret. Even on cloudy days, UV rays penetrate the skin.
+                                </p>
+                            </div>
+                            <div className="absolute -bottom-6 -right-6 w-32 h-32 bg-white/10 rounded-full blur-2xl" />
+                            <div className="absolute top-4 right-4 opacity-20">
+                                <LuSun size={40} />
+                            </div>
+                        </Card>
+
+                        <Card variant="glass" className="p-6" hover={false}>
+                            <div className="flex items-center gap-2 mb-4">
+                                <LuTrophy className="text-accent-400" size={18} />
+                                <CardTitle>Achievements</CardTitle>
+                            </div>
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-3 opacity-60">
+                                    <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-xl border border-white/10">🌱</div>
+                                    <div className="flex-1">
+                                        <p className="text-sm font-medium text-text-primary">7 Day Streak</p>
+                                        <div className="w-full h-1.5 bg-white/5 rounded-full mt-1.5 overflow-hidden">
+                                            <div className="h-full bg-primary-500 w-[60%] rounded-full" />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-accent-500/10 flex items-center justify-center text-xl border border-accent-500/20">🌟</div>
+                                    <div>
+                                        <p className="text-sm font-medium text-text-primary">Review Routine</p>
+                                        <p className="text-xs text-primary-400 font-medium">Completed</p>
                                     </div>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center text-xl">🌟</div>
-                                <div>
-                                    <p className="text-sm font-medium text-slate-800">Review Routine</p>
-                                    <p className="text-xs text-green-600 font-medium">Completed</p>
-                                </div>
-                            </div>
-                        </div>
+                        </Card>
                     </div>
                 </div>
-
             </div>
         </div>
     )

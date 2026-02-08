@@ -1,8 +1,14 @@
 import { useEffect, useState } from 'react'
 import { api } from '../services/api'
 import { useToast } from '../components/Toast.jsx'
+import { motion, AnimatePresence } from 'framer-motion'
+import {
+  LuSearch, LuFilter, LuDownload, LuFileText, LuCheck,
+  LuX, LuRefreshCcw, LuArrowUpRight, LuWallet, LuCalendar
+} from 'react-icons/lu'
+import { Card, CardTitle, CardDescription, CardBadge, IconWrapper } from '../components/Card'
 
-export default function Transactions(){
+export default function Transactions() {
   const [list, setList] = useState([])
   const [amount, setAmount] = useState('')
   const [method, setMethod] = useState('UPI')
@@ -10,205 +16,212 @@ export default function Transactions(){
   const [note, setNote] = useState('')
   const [filter, setFilter] = useState('')
   const [search, setSearch] = useState('')
-  const [refFilter, setRefFilter] = useState('')
   const [start, setStart] = useState('')
   const [end, setEnd] = useState('')
   const [category, setCategory] = useState('')
-  const [methodFilter, setMethodFilter] = useState('')
-  const [amountMin, setAmountMin] = useState('')
-  const [amountMax, setAmountMax] = useState('')
-  const [monthly, setMonthly] = useState([])
+  const [loading, setLoading] = useState(false)
   const [summary, setSummary] = useState(null)
+
   const uid = parseInt(localStorage.getItem('user_id'))
-  const role = (localStorage.getItem('role')||'').toUpperCase()
+  const role = (localStorage.getItem('role') || '').toUpperCase()
   const { push } = useToast()
 
-  async function load(){
-    try{
-      const isTxnId = /^\d+$/.test(refFilter.trim())
-      const q = [search, isTxnId ? '' : refFilter].filter(Boolean).join(' ').trim() || undefined
-      const transaction_id = isTxnId ? parseInt(refFilter.trim()) : undefined
-      const common = { status: filter||undefined, q, start: start||undefined, end: end||undefined, category: category||undefined, method: methodFilter||undefined, amount_min: amountMin||undefined, amount_max: amountMax||undefined }
-      if (role==='ADMIN'){
-        const res = await api.adminListTransactions({ ...common, page:1, page_size:200 })
-        setList(res.items||[])
-      } else {
-        setList(await api.listTransactions({ ...common, transaction_id }))
+  async function load() {
+    setLoading(true)
+    try {
+      const common = {
+        status: filter || undefined,
+        q: search || undefined,
+        start: start || undefined,
+        end: end || undefined,
+        category: category || undefined
       }
-      setSummary(await api.transactionsSummary(role==='ADMIN'?undefined:uid))
-      setMonthly(await api.monthly(12))
-    }catch{}
-  }
-  useEffect(()=>{ load() },[filter, search, start, end, category, methodFilter, amountMin, amountMax])
-  useEffect(()=>{ load() },[refFilter])
 
-  async function submit(e){
-    e.preventDefault()
-    if (!uid) return push('Login required','error')
-    const val = parseFloat(amount)
-    if (isNaN(val) || val <= 0) return push('Enter a valid amount','error')
-    try{
-      const t = await api.createTransaction({ user_id: uid, amount: val, status: 'pending', category: category||'general' })
-      await api.setTransactionMeta(t.transaction_id, { method, reference, note })
-      setAmount(''); push('Payment recorded','success'); load()
-    }catch(err){ push(err.message,'error') }
+      const res = await api.listTransactions(common)
+      setList(res || [])
+
+      const sum = await api.transactionsSummary(role === 'ADMIN' ? undefined : uid)
+      setSummary(sum)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [filter, search, start, end, category])
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'completed': return 'success'
+      case 'pending': return 'warning'
+      case 'failed': return 'danger'
+      case 'refunded': return 'primary'
+      default: return 'secondary'
+    }
   }
 
   return (
-    <div>
-      <div className="row" style={{justifyContent:'space-between'}}>
-        <h1>Transactions</h1>
-        <div className="row" style={{gap:'8px', alignItems:'flex-end', flexWrap:'wrap'}}>
-          <div style={{display:'flex', flexDirection:'column', flex:'1 1 320px', minWidth:280}}>
-            <label className="muted" style={{fontSize:12, marginBottom:4}}>Search reference or note</label>
-            <input placeholder="Search reference or note" value={search} onChange={e=>setSearch(e.target.value)} style={{width:'100%'}} />
-          </div>
-          <div style={{display:'flex', flexDirection:'column', flex:'0 1 200px', minWidth:180}}>
-            <label className="muted" style={{fontSize:12, marginBottom:4}}>Ref / Txn ID</label>
-            <input
-              placeholder="e.g. TXN-123 or 456"
-              value={refFilter}
-              onChange={e=>setRefFilter(e.target.value)}
-              style={{width:'100%'}}
-              title="Enter exact transaction ID (numbers) or reference text"
-            />
-          </div>
-          <div style={{display:'flex', flexDirection:'column', flex:'0 1 180px', minWidth:160}}>
-            <label className="muted" style={{fontSize:12, marginBottom:4}}>From (dd/mm/yyyy)</label>
-            <input
-              type="date"
-              value={start}
-              onChange={e=>setStart(e.target.value)}
-              placeholder="dd/mm/yyyy"
-              title="Use dd/mm/yyyy or yyyy-mm-dd"
-            />
-          </div>
-          <div style={{display:'flex', flexDirection:'column', flex:'0 1 180px', minWidth:160}}>
-            <label className="muted" style={{fontSize:12, marginBottom:4}}>To (dd/mm/yyyy)</label>
-            <input
-              type="date"
-              value={end}
-              onChange={e=>setEnd(e.target.value)}
-              placeholder="dd/mm/yyyy"
-              title="Use dd/mm/yyyy or yyyy-mm-dd"
-            />
-          </div>
-          <select value={category} onChange={e=>setCategory(e.target.value)} style={{flex:'0 1 180px'}}>
-            <option value="">All categories</option>
-            <option value="consultation">Consultation</option>
-            <option value="procedure">Procedure</option>
-            <option value="pharmacy">Pharmacy</option>
-            <option value="general">General</option>
-          </select>
-          <input placeholder="Method (UPI/Card/Cash)" value={methodFilter} onChange={e=>setMethodFilter(e.target.value)} style={{flex:'0 1 160px'}} />
-          <input placeholder="Min ₹" value={amountMin} onChange={e=>setAmountMin(e.target.value)} style={{width:100}} />
-          <input placeholder="Max ₹" value={amountMax} onChange={e=>setAmountMax(e.target.value)} style={{width:100}} />
-          <select value={filter} onChange={e=>setFilter(e.target.value)} style={{flex:'0 1 160px'}}>
-            <option value="">All</option>
-            <option value="pending">Pending</option>
-            <option value="completed">Completed</option>
-            <option value="failed">Failed</option>
-            <option value="refunded">Refunded</option>
-          </select>
+    <div className="min-h-screen pb-20 space-y-8">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-text-primary">Transactions</h1>
+          <p className="text-text-secondary mt-1">Manage your payments and billing history</p>
+        </div>
+        <div className="flex gap-2">
+          <a href={`${api.base}/transactions/export.csv`} target="_blank" rel="noreferrer" className="btn-secondary flex items-center gap-2">
+            <LuDownload size={18} /> CSV
+          </a>
+          <a href={`${api.base}/transactions/export.pdf`} target="_blank" rel="noreferrer" className="btn-secondary flex items-center gap-2">
+            <LuFileText size={18} /> PDF
+          </a>
         </div>
       </div>
 
-      {/* Summary cards */}
+      {/* Summary Cards */}
       {summary && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-          <div className="card"><div className="muted">Pending</div><div className="text-2xl font-semibold">₹ {summary.pending.toFixed(2)}</div></div>
-          <div className="card"><div className="muted">Completed</div><div className="text-2xl font-semibold">₹ {summary.completed.toFixed(2)}</div></div>
-          <div className="card"><div className="muted">Failed</div><div className="text-2xl font-semibold">₹ {summary.failed.toFixed(2)}</div></div>
-          <div className="card"><div className="muted">Count</div><div className="text-2xl font-semibold">{summary.count}</div></div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card variant="glass" className="p-5">
+            <div className="flex items-center gap-3 mb-2">
+              <IconWrapper variant="warning" size="sm"><LuRefreshCcw size={16} /></IconWrapper>
+              <h3 className="text-sm font-medium text-text-tertiary">Pending</h3>
+            </div>
+            <p className="text-2xl font-bold text-text-primary">₹ {summary.pending.toFixed(2)}</p>
+          </Card>
+          <Card variant="glass" className="p-5">
+            <div className="flex items-center gap-3 mb-2">
+              <IconWrapper variant="success" size="sm"><LuCheck size={16} /></IconWrapper>
+              <h3 className="text-sm font-medium text-text-tertiary">Completed</h3>
+            </div>
+            <p className="text-2xl font-bold text-text-primary">₹ {summary.completed.toFixed(2)}</p>
+          </Card>
+          <Card variant="glass" className="p-5">
+            <div className="flex items-center gap-3 mb-2">
+              <IconWrapper variant="danger" size="sm"><LuX size={16} /></IconWrapper>
+              <h3 className="text-sm font-medium text-text-tertiary">Failed</h3>
+            </div>
+            <p className="text-2xl font-bold text-text-primary">₹ {summary.failed.toFixed(2)}</p>
+          </Card>
+          <Card variant="glass" className="p-5">
+            <div className="flex items-center gap-3 mb-2">
+              <IconWrapper variant="primary" size="sm"><LuWallet size={16} /></IconWrapper>
+              <h3 className="text-sm font-medium text-text-tertiary">Total Count</h3>
+            </div>
+            <p className="text-2xl font-bold text-text-primary">{summary.count}</p>
+          </Card>
         </div>
       )}
 
-      {/* Create payment (admin only) */}
-      {role==='ADMIN' ? (
-        <form onSubmit={submit} className="card grid grid-cols-1 md:grid-cols-6 gap-3 mb-4">
-          <input type="number" step="0.01" placeholder="Amount (₹)" value={amount} onChange={e=>setAmount(e.target.value)} required />
-          <select value={category} onChange={e=>setCategory(e.target.value)}>
-            <option value="consultation">Consultation</option>
-            <option value="procedure">Procedure</option>
-            <option value="pharmacy">Pharmacy</option>
-            <option value="general">General</option>
-          </select>
-          <select value={method} onChange={e=>setMethod(e.target.value)}>
-            <option>UPI</option>
-            <option>Card</option>
-            <option>Cash</option>
-            <option>Bank Transfer</option>
-            <option>Other</option>
-          </select>
-          <input placeholder="Reference (Txn ID / UPI)" value={reference} onChange={e=>setReference(e.target.value)} />
-          <input placeholder="Note (optional)" value={note} onChange={e=>setNote(e.target.value)} />
-          <button className="button" type="submit">Record Payment</button>
-        </form>
-      ) : (
-        <div className="card mb-4"><div className="muted">Only admins can record payments.</div></div>
-      )}
+      {/* Filters */}
+      <Card variant="glass" className="p-4" hover={false}>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="lg:col-span-2 relative">
+            <LuSearch className="absolute left-3 top-3 text-text-muted" />
+            <input
+              className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary-500/50"
+              placeholder="Search by ID or reference..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <div className="relative">
+            <LuCalendar className="absolute left-3 top-3 text-text-muted" />
+            <input
+              type="date"
+              className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-text-primary focus:outline-none focus:border-primary-500/50"
+              value={start}
+              onChange={e => setStart(e.target.value)}
+            />
+          </div>
+          <div>
+            <select
+              className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 px-4 text-sm text-text-primary focus:outline-none focus:border-primary-500/50"
+              value={category}
+              onChange={e => setCategory(e.target.value)}
+            >
+              <option value="">All Categories</option>
+              <option value="consultation">Consultation</option>
+              <option value="procedure">Procedure</option>
+              <option value="pharmacy">Pharmacy</option>
+              <option value="general">General</option>
+            </select>
+          </div>
+          <div>
+            <select
+              className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 px-4 text-sm text-text-primary focus:outline-none focus:border-primary-500/50"
+              value={filter}
+              onChange={e => setFilter(e.target.value)}
+            >
+              <option value="">All Status</option>
+              <option value="pending">Pending</option>
+              <option value="completed">Completed</option>
+              <option value="failed">Failed</option>
+              <option value="refunded">Refunded</option>
+            </select>
+          </div>
+        </div>
+      </Card>
 
-      {/* Table */}
-      <div className="card" style={{overflowX:'auto'}}>
-        <table>
-          <thead className="sticky top-0"><tr><th>ID</th><th>Amount</th><th>Category</th><th>Method</th><th>Reference</th><th>Status</th><th>Created</th><th>Receipt</th>{role==='ADMIN' && <th>Actions</th>}</tr></thead>
-          <tbody>
-            {list.map(t=> (
-              <tr key={t.transaction_id}>
-                <td>{t.transaction_id}</td>
-                <td>₹ {t.amount}</td>
-                <td>{t.category||'general'}</td>
-                <td>{t.method||'-'}</td>
-                <td>{t.reference||'-'}</td>
-                <td><span className="chip">{t.status}</span></td>
-                <td>{new Date(t.created_at).toLocaleString()}</td>
-                <td>
-                  <div className="row">
-                    <a className="button" href={`${api.base}/transactions/${t.transaction_id}/receipt.pdf`} target="_blank" rel="noreferrer">PDF</a>
+      {/* List */}
+      <div className="space-y-4">
+        <AnimatePresence>
+          {list.map((t, i) => (
+            <motion.div
+              key={t.transaction_id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05 }}
+            >
+              <Card variant="elevated" className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 group">
+                <div className="flex items-center gap-4 w-full md:w-auto">
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold ${t.status === 'completed' ? 'bg-success/10 text-success' :
+                      t.status === 'failed' ? 'bg-danger/10 text-danger' :
+                        'bg-warning/10 text-warning'
+                    }`}>
+                    {t.status === 'completed' ? '✓' : t.status === 'failed' ? '!' : '⟳'}
                   </div>
-                </td>
-                {role==='ADMIN' && (
-                  <td>
-                    <div className="row">
-                      <button className="button" onClick={async()=>{ await api.updateTransactionStatus(t.transaction_id,'completed',''); load() }}>Mark Completed</button>
-                      <button className="button" onClick={async()=>{ const r=prompt('Reason for failure?')||''; await api.updateTransactionStatus(t.transaction_id,'failed', r); load() }}>Mark Failed</button>
-                      <button className="button" onClick={async()=>{ const r=prompt('Reason for refund?')||''; await api.updateTransactionStatus(t.transaction_id,'refunded', r); load() }}>Refund</button>
-                    </div>
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                  <div>
+                    <h3 className="font-semibold text-text-primary">₹ {t.amount}</h3>
+                    <p className="text-xs text-text-secondary flex items-center gap-1.5">
+                      <span className="capitalize">{t.category}</span> • <span>{new Date(t.created_at).toLocaleDateString()}</span>
+                    </p>
+                  </div>
+                </div>
 
-      {/* Export buttons */}
-      <div className="row mt-3">
-        <a className="button" href={`${api.base}/transactions/export.csv`} target="_blank" rel="noreferrer">Export CSV</a>
-        <a className="button" href={`${api.base}/transactions/export.pdf`} target="_blank" rel="noreferrer">Export PDF</a>
-      </div>
+                <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
+                  <div className="text-right hidden md:block">
+                    <p className="text-sm text-text-primary font-medium">{t.method || 'N/A'}</p>
+                    <p className="text-xs text-text-muted font-mono">{t.transaction_id}</p>
+                  </div>
 
-      {/* Monthly sparkline */}
-      {monthly.length>0 && (
-        <div className="card mt-4">
-          <div className="muted">Last 12 months</div>
-          <Sparkline data={monthly.map(m=>m.total)} labels={monthly.map(m=>m.month)} />
-        </div>
-      )}
+                  <div className="flex items-center gap-3">
+                    <CardBadge variant={getStatusColor(t.status)}>{t.status}</CardBadge>
+                    <a
+                      href={`${api.base}/transactions/${t.transaction_id}/receipt.pdf`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-2 text-text-secondary hover:text-primary-400 hover:bg-white/5 rounded-lg transition-colors"
+                      title="Download Receipt"
+                    >
+                      <LuFileText size={18} />
+                    </a>
+                  </div>
+                </div>
+              </Card>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+
+        {loading && <div className="text-center py-10 text-text-muted">Loading transactions...</div>}
+        {!loading && list.length === 0 && (
+          <div className="text-center py-20 bg-white/5 rounded-3xl border border-white/10 border-dashed">
+            <LuWallet className="mx-auto mb-4 text-text-muted" size={48} />
+            <h3 className="text-xl font-bold text-text-primary">No transactions found</h3>
+            <p className="text-text-tertiary">Adjust filters or create a new transaction.</p>
+          </div>
+        )}
+      </div>
     </div>
-  )
-}
-
-function Sparkline({ data, labels }){
-  const w = 400, h = 80, pad = 6
-  const max = Math.max(...data, 1)
-  const step = (w - pad*2) / Math.max(data.length-1, 1)
-  const points = data.map((v,i)=> [pad + i*step, h - pad - (v/max)*(h-pad*2)])
-  const d = points.map((p,i)=> (i? 'L':'M') + p[0] + ' ' + p[1]).join(' ')
-  return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
-      <path d={d} fill="none" stroke="#0078D4" strokeWidth="2" />
-      {points.map((p,i)=> <circle key={i} cx={p[0]} cy={p[1]} r="2" fill="#6B5BFF" />)}
-    </svg>
   )
 }

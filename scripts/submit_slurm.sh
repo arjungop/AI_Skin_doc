@@ -2,10 +2,10 @@
 # SLURM job submission for skin disease classification
 # Usage: bash scripts/submit_slurm.sh [model] [batch_size] [epochs] [gpu_type]
 
-BACKBONE="${1:-swin_b}"
-BATCH_SIZE="${2:-64}"
-EPOCHS="${3:-100}"
-GPU_TYPE="${4:-auto}"
+BACKBONE="${1:-convnext_large}"
+BATCH_SIZE="${2:-32}"
+EPOCHS="${3:-50}"
+GPU_TYPE="${4:-a100}"
 WALLTIME="48:00:00"
 
 JOB_NAME="skindoc_${BACKBONE}_e${EPOCHS}"
@@ -18,10 +18,11 @@ cat > "$SLURM_SCRIPT" << EOF
 #SBATCH --error=logs/slurm_%j.err
 #SBATCH --time=${WALLTIME}
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
+#SBATCH --cpus-per-task=12
+#SBATCH --mem=80G
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
+#SBATCH --requeue
 
 # Optional: Request specific GPU type if specified
 EOF
@@ -73,7 +74,14 @@ echo
 
 # Run GPU-optimized training
 echo "Starting training..."
-bash scripts/run_gpu_optimized.sh $BACKBONE $BATCH_SIZE $EPOCHS
+# Using train_bulletproof.py directly for best results
+python scripts/train_bulletproof.py \
+    --backbone "\$BACKBONE" \
+    --batch_size "\$BATCH_SIZE" \
+    --epochs "\$EPOCHS" \
+    --grad_accum 2 \
+    --checkpoint_dir "checkpoints/\$BACKBONE" \
+    --use_weighted_sampling
 
 # Print completion info
 echo
@@ -83,9 +91,9 @@ echo "Total runtime: $SECONDS seconds"
 EOF
 
 # Replace placeholders
-sed -i.bak "s/\$BACKBONE/$BACKBONE/g" "$SLURM_SCRIPT"
-sed -i.bak "s/\$BATCH_SIZE/$BATCH_SIZE/g" "$SLURM_SCRIPT"
-sed -i.bak "s/\$EPOCHS/$EPOCHS/g" "$SLURM_SCRIPT"
+sed -i.bak "s/\\\$BACKBONE/$BACKBONE/g" "$SLURM_SCRIPT"
+sed -i.bak "s/\\\$BATCH_SIZE/$BATCH_SIZE/g" "$SLURM_SCRIPT"
+sed -i.bak "s/\\\$EPOCHS/$EPOCHS/g" "$SLURM_SCRIPT"
 rm -f "${SLURM_SCRIPT}.bak"
 
 # Display job configuration
@@ -96,7 +104,7 @@ echo "Batch size: $BATCH_SIZE"
 echo "Epochs: $EPOCHS"
 echo "Walltime: 48 hours"
 echo "GPU type: $GPU_TYPE"
-echo "Memory: 64GB, CPUs: 8"
+echo "Memory: 80GB, CPUs: 12"
 echo
 
 # Create logs directory

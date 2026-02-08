@@ -1,52 +1,55 @@
-# [OK] A100 SERVER TRAINING - READY TO GO!
+# 🚀 Skin-Doc A100 Training Guide (Updated Feb 2026)
 
-##  Everything is Now Bulletproof
+Everything is optimized for the **University Cluster** and the **Massive 262k dataset**.
 
-Your setup has been completely overhauled for **reliable, queue-friendly A100 training** at your university.
+## 🚀 Quick Start (Cluster)
 
----
-
-## 📦 What You Have Now
-
-### [OK] Core Training Scripts
-- `train_a100.py` - Production training with A100 optimizations
-- `prepare_unified_dataset_v2.py` - Dataset preparation  
-- `server_setup.sh` - Complete server setup automation
-- `run_complete_training.sh` - **NEW** Complete pipeline in one command
-
-### [OK] Validation & Safety
-- `validate_setup.py` - **NEW** Pre-training validation (CRITICAL!)
-- `verify_dataset_links.py` - **NEW** Check Kaggle links validity
-- `setup_wizard.py` - **NEW** Interactive setup guide
-
-### [OK] Documentation
-- `SERVER_QUICKSTART.md` - **NEW** Quick reference guide
-- `TRAINING_SETUP.md` - Updated with automated workflow
-- `SETUP_IMPROVEMENTS.md` - **NEW** What was fixed
-
----
-
-##  Quick Start on University Server
-
-### **Option 1: Fully Automated (Recommended)**
-
+### 1. Update Repo
 ```bash
-# 1. Setup (run once)
-bash scripts/server_setup.sh
-
-# 2. Validate (before EVERY training!)
-python scripts/validate_setup.py
-
-# 3. Train (complete pipeline)
-bash scripts/run_complete_training.sh efficientnet_b4 64 50
+git pull origin main
 ```
 
-### **Option 2: Interactive Guide**
-
+### 2. Prepare Data & Train (SLURM)
+The most robust way to run. It will handle the 262k images, map them correctly, and train the **ConvNeXt-Large** model.
 ```bash
-python scripts/setup_wizard.py
-# Follow the prompts
+bash scripts/submit_slurm.sh convnext_large 32 50 a100
 ```
+*   **Model**: ConvNeXt-Large
+*   **Batch**: 32 (with 2x Grad Accumulation = 64 Effective)
+*   **Epochs**: 50
+*   **GPU**: Requesting A100
+
+### 3. Monitoring
+```bash
+tail -f logs/slurm_<job_id>.out
+```
+
+## 🛠️ Optimizations Applied
+
+1.  **ConvNeXt-Large Backbone**:
+    *   State-of-the-art accuracy for skin lesions.
+    *   Switched from EfficientNet to ConvNeXt-Large as default.
+    *   Input size: 384x384.
+
+2.  **Bulletproof Trainer (`scripts/train_bulletproof.py`)**:
+    *   **Auto-Resume**: If the cluster preempts your job, it will pick up exactly where it left off.
+    *   **Preemption Handling**: Listens for `SIGTERM` and `SIGCONT` (common in university clusters).
+    *   **BFloat16**: Uses NVIDIA A100's native precision for 2x speedup.
+    *   **Gradient Accumulation**: Handles large models on 40GB/80GB cards without OOM.
+
+3.  **Massive Dataset Support**:
+    *   `scripts/prepare_unified_dataset_v2.py` now maps the **262,000 images** from the `massive 2` folder into Category/Disease heads.
+    *   Auto-merges ISIC 2019, HAM10000, DermNet, and Massive 2.
+
+4.  **HPC Ready**:
+    *   Requesting 12 CPUs and 80GB RAM in SLURM for fast data loading.
+    *   Ensures `num_workers` and `pin_memory` are maximized for the A100 bandwidth.
+
+## 📁 File Structure for Massive 2
+Ensure your dataset is at:
+`~/arjungop/AI_Skin_Doc/massive 2/balanced_dataset/balanced_dataset/`
+
+---
 
 That's it! Everything else is handled automatically.
 
