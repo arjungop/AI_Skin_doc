@@ -12,10 +12,24 @@ import random
 import json
 from collections import defaultdict
 
-DATASETS_DIR = Path("datasets")
+DATASETS_DIR = Path(".") # Current dir
+ALTERNATIVE_DATA_DIR = Path("/data") # Common cluster path
+
 OUTPUT_TRAIN = Path("data/unified_train")
 OUTPUT_VAL = Path("data/unified_val")
 OUTPUT_TEST = Path("data/unified_test")
+
+def find_dataset_path(rel_path):
+    """Search for a dataset in multiple common locations"""
+    search_paths = [
+        Path(rel_path),
+        DATASETS_DIR / rel_path,
+        ALTERNATIVE_DATA_DIR / rel_path,
+    ]
+    for p in search_paths:
+        if p.exists():
+            return p
+    return None
 
 TRAIN_SPLIT = 0.8
 VAL_SPLIT = 0.1
@@ -67,6 +81,26 @@ DISEASE_MAP = {
     'Vasculitis Photos': 'vasculitis',
     'Warts Molluscum and other Viral Infections': 'viral',
     
+    # Fitzpatrick 17k labels
+    'basal cell carcinoma': 'bcc',
+    'squamous cell carcinoma': 'scc',
+    'melanoma': 'melanoma',
+    'nevus': 'nevus',
+    'psoriasis': 'psoriasis',
+    'eczema': 'eczema',
+    'seborrheic keratosis': 'seborrheic_keratosis',
+    'actinic keratosis': 'ak',
+    'benign keratosis-like lesions': 'seborrheic_keratosis',
+    'dermatofibroma': 'benign',
+    'vascular lesions': 'angioma',
+    
+    # ISIC specific
+    'Bcc': 'bcc',
+    'Mel': 'melanoma',
+    'Nv': 'nevus',
+    'Ak': 'ak',
+    'Scc': 'scc',
+    
     # Massive 2 Dataset Mapping
     'Acne And Rosacea Photos': 'acne',
     'Actinic Keratosis Basal Cell Carcinoma And Other Malignant Lesions': 'ak',
@@ -108,50 +142,50 @@ DISEASE_MAP = {
 def process_massive2():
     """Process the Massive 2 Dataset (262k images)"""
     print("  Processing Massive 2 dataset...")
-    massive_paths = [
-        Path("massive_skin_disease/balanced_dataset/balanced_dataset"),
-        Path("massive_skin_disease"),
-        Path("massive 2/balanced_dataset/balanced_dataset"),
-        DATASETS_DIR / "massive_skin_disease",
-        DATASETS_DIR / "massive 2" / "balanced_dataset" / "balanced_dataset",
-    ]
     
-    source_dir = None
-    for p in massive_paths:
-        if p.exists() and any(p.iterdir()):
-            source_dir = p
-            break
-        
+    # Try multiple search patterns
+    potential_dirs = [
+        find_dataset_path("massive_skin_disease"),
+        find_dataset_path("massive 2"),
+        find_dataset_path("balanced_dataset")
+    ]
+    source_dir = next((d for d in potential_dirs if d and d.exists()), None)
+    
     if not source_dir:
-        print("  Skipping Massive 2: Directory not found")
+        print("    Skipping Massive 2: Directory not found")
         return []
 
-    # Check for subdirectories if the top-level was found
-    if source_dir.name == "massive_skin_disease" and (source_dir / "balanced_dataset").exists():
-        source_dir = source_dir / "balanced_dataset" / "balanced_dataset"
-        
+    # Auto-navigate to deeper folder if needed
+    search_sub = source_dir
+    for _ in range(3): # Max depth 3
+        if (search_sub / "balanced_dataset").exists():
+            search_sub = search_sub / "balanced_dataset"
+        elif (search_sub / "balanced_dataset").exists() == False and list(search_sub.glob("*/balanced_dataset")):
+             search_sub = list(search_sub.glob("*/balanced_dataset"))[0]
+        else:
+            break
+            
     samples = []
-    for disease_folder in source_dir.iterdir():
+    print(f"    Sourcing from: {search_sub}")
+    for disease_folder in search_sub.iterdir():
         if not disease_folder.is_dir(): continue
         label = DISEASE_MAP.get(disease_folder.name)
         if label:
             for img_path in disease_folder.glob("*.jpg"):
                 samples.append((img_path, label))
-    print(f"    Found {len(samples)} images from Massive 2")
+    print(f"    Found {len(samples)} images")
     return samples
 
 def process_isic2019():
     """Process ISIC 2019"""
     print("  Processing ISIC 2019...")
     
-    # Try common cluster paths
-    csv_paths = [
-        DATASETS_DIR / "isic_data" / "isic_2019" / "ISIC_2019_Training_GroundTruth.csv",
-        Path("isic_data/isic_2019/ISIC_2019_Training_GroundTruth.csv"),
-        Path("isic_data/ISIC_2019_Training_GroundTruth.csv")
-    ]
-    
-    csv_path = next((p for p in csv_paths if p.exists()), None)
+    csv_path = find_dataset_path("isic_data/isic_2019/ISIC_2019_Training_GroundTruth.csv")
+    if not csv_path:
+        csv_path = find_dataset_path("isic_data/ISIC_2019_Training_GroundTruth.csv")
+    if not csv_path:
+        csv_path = find_dataset_path("ISIC_2019_Training_GroundTruth.csv")
+        
     if not csv_path:
         print("    ISIC 2019 CSV not found.")
         return []
@@ -164,35 +198,54 @@ def process_isic2019():
     if not images_dir:
         print("    ISIC 2019 Image directory not found.")
         return []
-
+    
     df = pd.read_csv(csv_path)
     samples = []
+    
+    # ISIC column values can be 1.0, 1, or '1.0'
+    def is_active(val):
+        try:
+            return float(val) == 1.0
+        except (ValueError, TypeError):
+            return str(val).strip() == "1"
+
     for _, row in tqdm(df.iterrows(), total=len(df), leave=False):
         img_name = row['image']
-        # Find active class
         disease = None
         for col in df.columns:
-            if col != 'image' and row[col] == 1.0:
+            if col != 'image' and is_active(row[col]):
                 disease = DISEASE_MAP.get(col, col.lower())
                 break
         
         if disease:
-            img_path = images_dir / f"{img_name}.jpg"
-            if img_path.exists(): 
-                samples.append((img_path, disease))
+            # Check for both .jpg and .png just in case
+            found_img = None
+            for ext in [".jpg", ".JPG", ".jpeg", ".JPEG"]:
+                p = images_dir / f"{img_name}{ext}"
+                if p.exists():
+                    found_img = p
+                    break
+            
+            if found_img:
+                samples.append((found_img, disease))
     print(f"    Found {len(samples)} images")
     return samples
 
 def process_ham10000():
     """Process HAM10000"""
     print("  Processing HAM10000...")
-    csv_path = DATASETS_DIR / "ham10000" / "HAM10000_metadata.csv"
-    img_dir1 = DATASETS_DIR / "ham10000" / "HAM10000_images_part_1"
-    img_dir2 = DATASETS_DIR / "ham10000" / "HAM10000_images_part_2"
+    base_dir = find_dataset_path("ham10000")
+    if not base_dir: base_dir = find_dataset_path("HAM10000")
+    if not base_dir: return []
+    
+    csv_path = base_dir / "HAM10000_metadata.csv"
+    img_dir1 = base_dir / "HAM10000_images_part_1"
+    img_dir2 = base_dir / "HAM10000_images_part_2"
+    
     if not csv_path.exists(): return []
     df = pd.read_csv(csv_path)
     samples = []
-    for _, row in tqdm(df.iterrows(), total=len(df)):
+    for _, row in tqdm(df.iterrows(), total=len(df), leave=False):
         img_id = row['image_id']
         disease = DISEASE_MAP.get(row['dx'], row['dx'])
         img_path = img_dir1 / f"{img_id}.jpg"
@@ -204,6 +257,21 @@ def process_ham10000():
 def process_dermnet():
     """Process DermNet"""
     print("  Processing DermNet...")
+    base_dir = find_dataset_path("dermnet")
+    if not base_dir: base_dir = find_dataset_path("DermNet")
+    if not base_dir: return []
+    
+    samples = []
+    for split in ['train', 'test', 'Train', 'Test']:
+        split_dir = base_dir / split
+        if not split_dir.exists(): continue
+        for category_dir in split_dir.iterdir():
+            if not category_dir.is_dir(): continue
+            label = DISEASE_MAP.get(category_dir.name, category_dir.name.lower())
+            for img_path in category_dir.glob("*.jpg"):
+                samples.append((img_path, label))
+    print(f"    Found {len(samples)} images")
+    return samples
     dermnet_dir = DATASETS_DIR / "dermnet_main"
     if not dermnet_dir.exists(): return []
     samples = []
@@ -214,6 +282,37 @@ def process_dermnet():
             if not folder.is_dir(): continue
             disease = DISEASE_MAP.get(folder.name, folder.name.lower())
             for img_path in list(folder.glob("*.jpg")) + list(folder.glob("*.png")):
+                samples.append((img_path, disease))
+    print(f"    Found {len(samples)} images")
+    return samples
+
+def process_fitzpatrick17k():
+    """Process Fitzpatrick17k (Diverse skin tones)"""
+    print("  Processing Fitzpatrick17k...")
+    csv_paths = [
+        DATASETS_DIR / "fitzpatrick17k" / "fitzpatrick17k.csv",
+        Path("fitzpatrick17k/fitzpatrick17k.csv"),
+    ]
+    csv_path = next((p for p in csv_paths if p.exists()), None)
+    if not csv_path:
+        print("    Fitzpatrick17k CSV not found. Skipping.")
+        return []
+        
+    img_dir = csv_path.parent / "images"
+    if not img_dir.exists():
+        img_dir = csv_path.parent # Check if images are in same folder as CSV
+        
+    df = pd.read_csv(csv_path)
+    samples = []
+    # Fitzpatrick17k columns: label, md5hash
+    label_col = 'label' if 'label' in df.columns else 'diagnostic'
+    hash_col = 'md5hash' if 'md5hash' in df.columns else None
+    
+    if hash_col and label_col in df.columns:
+        for _, row in tqdm(df.iterrows(), total=len(df), leave=False):
+            disease = DISEASE_MAP.get(row[label_col].lower(), row[label_col].lower())
+            img_path = img_dir / f"{row[hash_col]}.jpg"
+            if img_path.exists():
                 samples.append((img_path, disease))
     print(f"    Found {len(samples)} images")
     return samples
@@ -229,6 +328,7 @@ def main():
     all_data.extend(process_ham10000())
     all_data.extend(process_dermnet())
     all_data.extend(process_massive2())
+    all_data.extend(process_fitzpatrick17k())
     
     if not all_data:
         print("❌ No images found! Check paths.")
