@@ -7,26 +7,46 @@ export function useGeolocation() {
 
     const requestLocation = () => {
         setLoading(true);
-        if (!navigator.geolocation) {
-            setError('Geolocation is not supported by your browser');
-            setLoading(false);
-            return;
-        }
+        setError(null);
 
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
+        // 1. Try Browser Geolocation
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    setLocation({
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude,
+                    });
+                    setLoading(false);
+                },
+                (err) => {
+                    console.warn('Geolocation access denied/failed, falling back to IP location.');
+                    fetchIPLocation();
+                }
+            );
+        } else {
+            fetchIPLocation();
+        }
+    };
+
+    const fetchIPLocation = async () => {
+        try {
+            const res = await fetch('https://ipapi.co/json/');
+            const data = await res.json();
+            if (data.latitude && data.longitude) {
                 setLocation({
-                    latitude: position.coords.latitude,
-                    longitude: position.coords.longitude,
+                    latitude: parseFloat(data.latitude),
+                    longitude: parseFloat(data.longitude)
                 });
-                setLoading(false);
-                setError(null);
-            },
-            (err) => {
-                setError('Unable to retrieve your location');
-                setLoading(false);
+            } else {
+                throw new Error('Invalid IP data');
             }
-        );
+        } catch (err) {
+            console.error(err);
+            setError('Could not retrieve location via GPS or IP.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     return { location, error, loading, requestLocation };

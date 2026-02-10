@@ -34,3 +34,22 @@ def add_skin_log(
     db.commit()
     db.refresh(new_log)
     return new_log
+
+@router.delete("/{log_id}")
+def delete_skin_log(
+    log_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db)
+):
+    """Delete a skin journey log entry"""
+    log = db.query(models.SkinLog).filter(
+        models.SkinLog.log_id == log_id,
+        models.SkinLog.user_id == user_id
+    ).first()
+    
+    if not log:
+        raise HTTPException(status_code=404, detail="Log not found")
+    
+    db.delete(log)
+    db.commit()
+    return {"message": "Log deleted successfully"}

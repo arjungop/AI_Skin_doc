@@ -50,7 +50,14 @@ function Protected({ children }) {
       }
     })()
   }, [])
-  if (!checked) return null
+  if (!checked) return (
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-10 h-10 border-4 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />
+        <p className="text-text-secondary text-sm">Verifying session...</p>
+      </div>
+    </div>
+  )
   return children
 }
 
@@ -93,20 +100,34 @@ function IndexRoute() {
   const role = (localStorage.getItem('role') || '').toUpperCase()
   const hasSession = !!(localStorage.getItem('user_id') || localStorage.getItem('patient_id'))
   const [target, setTarget] = useState('')
+  const [error, setError] = useState(false)
 
   useEffect(() => {
     if (!role || !hasSession) return
     if (role === 'PATIENT') {
       import('./services/api.js').then(({ api }) => {
-        api.getProfile().then(() => setTarget('/dashboard'))
+        api.getProfile()
+          .then(() => setTarget('/dashboard'))
           .catch(() => setTarget('/onboarding'))
-      })
+      }).catch(() => setError(true))
+    } else if (role === 'DOCTOR') {
+      setTarget('/doctor')
+    } else if (role === 'ADMIN') {
+      setTarget('/admin')
     } else {
       setTarget('/dashboard')
     }
   }, [role, hasSession])
 
   if (!role || !hasSession) return <Navigate to="/login" replace />
-  if (!target) return <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center animate-pulse">Loading...</div>
-  return <AppShell><Navigate to={target} replace /></AppShell>
+  if (error) return <Navigate to="/login" replace />
+  if (!target) return (
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-10 h-10 border-4 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />
+        <p className="text-text-secondary text-sm">Loading your dashboard...</p>
+      </div>
+    </div>
+  )
+  return <Navigate to={target} replace />
 }

@@ -331,6 +331,13 @@ class Trainer:
             pretrained=True
         ).to(self.device)
         
+        # Load checkpoint if resuming
+        if self.config.get('resume'):
+            print(f"📥 Loading checkpoint: {self.config['resume']}")
+            ckpt = torch.load(self.config['resume'], map_location=self.device)
+            self.model.load_state_dict(ckpt['model_state_dict'], strict=False)
+            print(f"   Loaded from epoch {ckpt.get('epoch', '?')} with acc {ckpt.get('best_acc', '?'):.2f}%")
+        
         # Compile for PyTorch 2.0+
         if hasattr(torch, 'compile') and self.config.get('compile', True):
             print("⚡ Compiling model with torch.compile...")
@@ -507,6 +514,7 @@ def main():
     # Flags
     parser.add_argument("--weighted_sampling", action="store_true", default=True)
     parser.add_argument("--no_compile", action="store_true")
+    parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume from")
     
     args = parser.parse_args()
     
@@ -526,6 +534,7 @@ def main():
         'num_workers': args.num_workers,
         'weighted_sampling': args.weighted_sampling,
         'compile': not args.no_compile,
+        'resume': args.resume,
     }
     
     print("="*60)

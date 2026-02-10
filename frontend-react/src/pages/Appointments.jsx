@@ -62,10 +62,14 @@ export default function Appointments() {
       let data = await api.listAppointments()
       if (role === 'DOCTOR' && did) data = data.filter(a => a.doctor_id === did)
       else if (pid) data = data.filter(a => a.patient_id === pid)
-      setList(data)
+      setList(data || [])
       const docs = await api.listDoctors()
-      setDoctors(docs)
-    } catch { }
+      setDoctors(docs || [])
+    } catch (err) {
+      push(err.message || 'Failed to load appointments', 'error')
+      setList([])
+      setDoctors([])
+    }
     setLoading(false)
   }
 
@@ -83,12 +87,6 @@ export default function Appointments() {
 
   return (
     <div className="relative min-h-screen">
-      {/* Ambient Background */}
-      <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute top-20 right-1/4 w-[500px] h-[500px] bg-primary-500/10 rounded-full blur-[120px] opacity-40" />
-        <div className="absolute bottom-1/3 left-1/3 w-[400px] h-[400px] bg-accent-500/10 rounded-full blur-[100px] opacity-30" />
-      </div>
-
       <motion.div
         variants={container}
         initial="hidden"
@@ -98,8 +96,8 @@ export default function Appointments() {
         {/* Header */}
         <motion.header variants={item} className="flex flex-col md:flex-row md:items-center justify-between gap-4 lg:pr-72">
           <div>
-            <h1 className="text-4xl md:text-5xl font-bold text-text-primary tracking-tight">Appointments</h1>
-            <p className="text-text-tertiary mt-2 text-lg">Manage your consultations and checkups</p>
+            <h1 className="text-4xl md:text-5xl font-bold text-slate-900 tracking-tight">Appointments</h1>
+            <p className="text-slate-500 mt-2 text-lg">Manage your consultations and checkups</p>
           </div>
           {role === 'PATIENT' && (
             <motion.button
@@ -116,9 +114,9 @@ export default function Appointments() {
         {/* Booking Form Card */}
         {role === 'PATIENT' && (
           <motion.section variants={item} id="book-form">
-            <Card variant="glass" className="p-8" hover={false}>
+            <Card className="p-8" hover={false}>
               <div className="flex items-center gap-3 mb-6">
-                <IconWrapper variant="primary">
+                <IconWrapper variant="primary" className="bg-primary-50 text-primary-600">
                   <LuCalendarPlus size={20} />
                 </IconWrapper>
                 <CardTitle className="text-xl">Book a Consultation</CardTitle>
@@ -127,9 +125,9 @@ export default function Appointments() {
               <form onSubmit={submit} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   <div className="space-y-2">
-                    <label className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">Select Doctor</label>
+                    <label className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Select Doctor</label>
                     <select
-                      className="w-full bg-surface-elevated border border-white/10 rounded-xl px-4 py-3 text-text-primary focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all"
                       value={doctorId}
                       onChange={e => setDoctorId(e.target.value)}
                       required
@@ -142,9 +140,9 @@ export default function Appointments() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">Date</label>
+                    <label className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Date</label>
                     <input
-                      className="w-full bg-surface-elevated border border-white/10 rounded-xl px-4 py-3 text-text-primary focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all"
                       type="date"
                       value={date}
                       onChange={e => setDate(e.target.value)}
@@ -153,9 +151,9 @@ export default function Appointments() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">Reason</label>
+                    <label className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Reason</label>
                     <input
-                      className="w-full bg-surface-elevated border border-white/10 rounded-xl px-4 py-3 text-text-primary placeholder:text-text-muted focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 placeholder:text-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all"
                       placeholder="e.g. Skin rash, Checkup..."
                       value={reason}
                       onChange={e => setReason(e.target.value)}
@@ -164,8 +162,8 @@ export default function Appointments() {
                 </div>
 
                 {/* Slots Grid */}
-                <div className="bg-surface-elevated/50 rounded-2xl p-6 border border-white/5">
-                  <label className="text-sm font-semibold text-text-tertiary uppercase tracking-wider block mb-4">Available Slots</label>
+                <div className="bg-slate-50/50 rounded-2xl p-6 border border-slate-100">
+                  <label className="text-sm font-semibold text-slate-500 uppercase tracking-wider block mb-4">Available Slots</label>
                   {date && slots.length > 0 ? (
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
                       {slots.map(s => (
@@ -176,15 +174,15 @@ export default function Appointments() {
                           className={`py-2.5 px-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5
                             ${selectedSlot === s
                               ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/30 scale-105'
-                              : 'bg-white/5 border border-white/10 text-text-secondary hover:border-primary-500/30 hover:text-primary-400'}`}
+                              : 'bg-white border border-slate-200 text-slate-600 hover:border-primary-300 hover:text-primary-600'}`}
                         >
-                          <LuClock size={12} className="opacity-70" />
+                          <LuClock size={12} className={selectedSlot === s ? 'opacity-70' : 'text-slate-400'} />
                           {s}
                         </button>
                       ))}
                     </div>
                   ) : (
-                    <div className="text-center py-8 text-text-muted flex flex-col items-center">
+                    <div className="text-center py-8 text-slate-400 flex flex-col items-center">
                       <LuTriangleAlert className="mb-2 text-2xl opacity-40" />
                       {date ? 'No slots available for this date.' : 'Please select a doctor and date first.'}
                     </div>
@@ -208,55 +206,55 @@ export default function Appointments() {
 
         {/* Appointment List */}
         <motion.section variants={item}>
-          <Card variant="glass" className="p-0 overflow-hidden" hover={false}>
+          <Card className="p-0 overflow-hidden border-slate-200" hover={false}>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="bg-white/5 text-left border-b border-white/10">
-                    <th className="p-6 font-semibold text-text-secondary">Doctor</th>
-                    <th className="p-6 font-semibold text-text-secondary">Date & Time</th>
-                    <th className="p-6 font-semibold text-text-secondary">Reason</th>
-                    <th className="p-6 font-semibold text-text-secondary">Status</th>
-                    <th className="p-6 font-semibold text-text-secondary text-right">Actions</th>
+                  <tr className="bg-slate-50 text-left border-b border-slate-200">
+                    <th className="p-6 font-semibold text-slate-600">Doctor</th>
+                    <th className="p-6 font-semibold text-slate-600">Date & Time</th>
+                    <th className="p-6 font-semibold text-slate-600">Reason</th>
+                    <th className="p-6 font-semibold text-slate-600">Status</th>
+                    <th className="p-6 font-semibold text-slate-600 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5">
+                <tbody className="divide-y divide-slate-100">
                   {loading && (
                     <tr>
-                      <td colSpan="5" className="p-12 text-center text-text-muted">Loading appointments...</td>
+                      <td colSpan="5" className="p-12 text-center text-slate-500">Loading appointments...</td>
                     </tr>
                   )}
                   {!loading && list.length === 0 && (
                     <tr>
-                      <td colSpan="5" className="p-12 text-center text-text-muted">No appointments found.</td>
+                      <td colSpan="5" className="p-12 text-center text-slate-500">No appointments found.</td>
                     </tr>
                   )}
                   {list.map(a => {
                     const d = doctors.find(x => x.doctor_id === a.doctor_id)
                     const isPast = new Date(a.appointment_date) < new Date()
                     return (
-                      <tr key={a.appointment_id} className="hover:bg-white/5 transition-colors">
+                      <tr key={a.appointment_id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="p-6">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-primary-500/10 flex items-center justify-center">
-                              <LuUser size={18} className="text-primary-400" />
+                            <div className="w-10 h-10 rounded-xl bg-primary-50 flex items-center justify-center border border-primary-100">
+                              <LuUser size={18} className="text-primary-500" />
                             </div>
                             <div>
-                              <div className="font-semibold text-text-primary">{d?.username || `Dr. #${a.doctor_id}`}</div>
-                              <div className="text-xs text-text-tertiary">{d?.specialization || 'General'}</div>
+                              <div className="font-semibold text-slate-900">{d?.username || `Dr. #${a.doctor_id}`}</div>
+                              <div className="text-xs text-slate-500">{d?.specialization || 'General'}</div>
                             </div>
                           </div>
                         </td>
-                        <td className="p-6 text-text-secondary font-medium">
+                        <td className="p-6 text-slate-600 font-medium">
                           {new Date(a.appointment_date).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
                         </td>
-                        <td className="p-6 text-text-secondary max-w-xs truncate" title={a.reason}>{a.reason || 'Routine Checkup'}</td>
+                        <td className="p-6 text-slate-600 max-w-xs truncate" title={a.reason}>{a.reason || 'Routine Checkup'}</td>
                         <td className="p-6">
                           <StatusBadge status={a.status} />
                         </td>
                         <td className="p-6 text-right space-x-2">
                           {role === 'PATIENT' && ['Scheduled', 'Confirmed'].includes(a.status) && !isPast && (
-                            <button className="px-3 py-1.5 text-xs font-semibold text-danger bg-danger/10 hover:bg-danger/20 rounded-lg transition-colors border border-danger/20" onClick={async () => { await api.updateAppointmentStatus(a.appointment_id, 'Cancelled'); load() }}>
+                            <button className="px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors border border-rose-100" onClick={async () => { await api.updateAppointmentStatus(a.appointment_id, 'Cancelled'); load() }}>
                               Cancel
                             </button>
                           )}
@@ -267,7 +265,7 @@ export default function Appointments() {
                                 <button className="btn-ghost text-xs px-3" onClick={async () => { await api.updateAppointmentStatus(a.appointment_id, 'Confirmed'); load() }}>Confirm</button>
                               )}
                               {['Scheduled', 'Confirmed'].includes(a.status) && (
-                                <button className="btn-ghost text-xs text-danger hover:bg-danger/10 px-3" onClick={async () => { await api.updateAppointmentStatus(a.appointment_id, 'Cancelled'); load() }}>Cancel</button>
+                                <button className="btn-ghost text-xs text-rose-500 hover:bg-rose-50 px-3" onClick={async () => { await api.updateAppointmentStatus(a.appointment_id, 'Cancelled'); load() }}>Cancel</button>
                               )}
                               {['Scheduled', 'Confirmed'].includes(a.status) && (
                                 <button className="btn-primary text-xs px-3 py-1.5" onClick={async () => { await api.updateAppointmentStatus(a.appointment_id, 'Completed'); load() }}>Complete</button>
@@ -290,10 +288,10 @@ export default function Appointments() {
 
 function StatusBadge({ status }) {
   const styles = {
-    Scheduled: 'bg-ai-500/10 text-ai-400 border-ai-500/20',
-    Confirmed: 'bg-primary-500/10 text-primary-400 border-primary-500/20',
-    Cancelled: 'bg-white/5 text-text-muted border-white/10',
-    Completed: 'bg-accent-500/10 text-accent-400 border-accent-500/20',
+    Scheduled: 'bg-violet-50 text-violet-600 border-violet-100',
+    Confirmed: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+    Cancelled: 'bg-slate-50 text-slate-500 border-slate-200',
+    Completed: 'bg-sky-50 text-sky-600 border-sky-100',
   }
   const icon = {
     Confirmed: <LuCheck className="mr-1.5" size={12} />,
@@ -301,7 +299,7 @@ function StatusBadge({ status }) {
     Completed: <LuCheck className="mr-1.5" size={12} />
   }
   return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${styles[status] || 'bg-white/5 text-text-muted'}`}>
+    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${styles[status] || 'bg-slate-50 text-slate-500'}`}>
       {icon[status]}
       {status}
     </span>

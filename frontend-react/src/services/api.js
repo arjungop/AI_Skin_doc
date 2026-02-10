@@ -157,6 +157,7 @@ export const api = {
   // Skin Journey
   getJourney: () => request('/journey/'),
   addJourneyLog: (data) => request('/journey/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
+  deleteJourneyLog: (logId) => request(`/journey/${logId}`, { method: 'DELETE' }),
   // Routine
   getRoutine: () => request('/routine/'),
   addRoutineItem: (data) => request('/routine/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),

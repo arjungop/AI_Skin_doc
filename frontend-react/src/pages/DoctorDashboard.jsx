@@ -24,7 +24,7 @@ export default function DoctorDashboard() {
       {/* Ambient Background Glow */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-0 right-1/4 w-[500px] h-[500px] bg-primary-500/10 rounded-full blur-[120px] opacity-40" />
-        <div className="absolute bottom-1/4 left-1/4 w-[400px] h-[400px] bg-accent-500/10 rounded-full blur-[100px] opacity-30" />
+        <div className="absolute bottom-1/4 left-1/4 w-[400px] h-[400px] bg-secondary-100/40 rounded-full blur-[100px] opacity-30" />
       </div>
 
       <motion.div
@@ -36,14 +36,14 @@ export default function DoctorDashboard() {
         {/* Header */}
         <header className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-4 lg:pr-72">
           <motion.div variants={item}>
-            <p className="text-sm uppercase tracking-widest text-text-tertiary font-medium mb-2">
+            <p className="text-sm uppercase tracking-widest text-slate-400 font-medium mb-2">
               {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
             </p>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight">
-              <span className="text-text-primary">Dr.</span>{' '}
+              <span className="text-slate-900">Dr.</span>{' '}
               <span className="text-gradient-primary">{name}</span>
             </h1>
-            <p className="text-text-tertiary mt-3 text-lg">Your daily practice overview</p>
+            <p className="text-slate-400 mt-3 text-lg">Your daily practice overview</p>
           </motion.div>
           <motion.div variants={item} className="flex gap-3">
             <motion.button
@@ -61,19 +61,19 @@ export default function DoctorDashboard() {
 
           {/* 1. Statistics Card (Wide) */}
           <motion.div variants={item} className="md:col-span-2">
-            <Card variant="glass" className="h-full p-8 flex items-center justify-between" hover>
+            <Card className="h-full p-8 flex items-center justify-between" hover>
               <div>
-                <p className="text-sm font-semibold text-text-tertiary uppercase tracking-wider mb-2">Today's Appointments</p>
+                <p className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-2">Today's Appointments</p>
                 <h2 className="text-5xl font-bold text-gradient-primary">12</h2>
                 <p className="text-primary-400 font-semibold text-sm mt-3 flex items-center gap-1.5">
                   <FaChartLine size={14} /> +2 from yesterday
                 </p>
               </div>
-              <div className="h-20 w-px bg-white/10 mx-6" />
+              <div className="h-20 w-px bg-slate-200 mx-6" />
               <div>
-                <p className="text-sm font-semibold text-text-tertiary uppercase tracking-wider mb-2">Pending Reviews</p>
-                <h2 className="text-5xl font-bold text-accent-400">5</h2>
-                <Link to="/lesions" className="text-text-secondary hover:text-primary-400 font-semibold text-sm mt-3 flex items-center gap-1 transition-colors">
+                <p className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-2">Pending Reviews</p>
+                <h2 className="text-5xl font-bold text-secondary-500">5</h2>
+                <Link to="/lesions" className="text-slate-500 hover:text-primary-500 font-semibold text-sm mt-3 flex items-center gap-1 transition-colors">
                   Review Scans <LuArrowRight size={14} />
                 </Link>
               </div>
@@ -92,7 +92,7 @@ export default function DoctorDashboard() {
 
           {/* 4. Clinical Notes Card */}
           <motion.div variants={item}>
-            <Card variant="elevated" className="h-full p-6 cursor-pointer group" hover>
+            <Card className="h-full p-6 cursor-pointer group" hover>
               <IconWrapper variant="ai" className="mb-4">
                 <LuSparkles size={22} />
               </IconWrapper>
@@ -103,7 +103,7 @@ export default function DoctorDashboard() {
 
           {/* 5. Search Patient Card */}
           <motion.div variants={item}>
-            <Card variant="elevated" className="h-full p-6 cursor-pointer group" hover>
+            <Card className="h-full p-6 cursor-pointer group" hover>
               <IconWrapper variant="accent" className="mb-4">
                 <LuSearch size={22} />
               </IconWrapper>

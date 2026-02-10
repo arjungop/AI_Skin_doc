@@ -26,13 +26,35 @@ export default function Register() {
   const onSubmit = async (e) => {
     e.preventDefault()
     setMsg('')
+    // Client-side validation
+    if (!form.first_name.trim() || !form.last_name.trim()) {
+      setMsg('Please enter your full name')
+      return
+    }
+    if (!form.email.includes('@') || !form.email.includes('.')) {
+      setMsg('Please enter a valid email address')
+      return
+    }
+    if (form.password.length < 8) {
+      setMsg('Password must be at least 8 characters')
+      return
+    }
+    const age = parseInt(form.age)
+    if (isNaN(age) || age < 1 || age > 120) {
+      setMsg('Please enter a valid age between 1 and 120')
+      return
+    }
+    if (!form.gender) {
+      setMsg('Please select your gender')
+      return
+    }
     try {
       setLoading(true)
-      await api.register({ ...form, age: parseInt(form.age) })
+      await api.register({ ...form, age })
       setMsg('Account created! Redirecting to login...')
       setTimeout(() => navigate('/login'), 1000)
     } catch (err) {
-      setMsg(err.message)
+      setMsg(err.message || 'Registration failed. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -44,9 +66,9 @@ export default function Register() {
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
         <div className="absolute inset-0 bg-surface">
           <div className="absolute inset-0 opacity-60">
-            <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-accent-500/20 rounded-full blur-[120px] animate-float" />
+            <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-secondary-500/20 rounded-full blur-[120px] animate-float" />
             <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-primary-500/20 rounded-full blur-[100px] animate-float animation-delay-200" />
-            <div className="absolute top-1/2 left-1/3 w-[400px] h-[400px] bg-ai-500/15 rounded-full blur-[80px] animate-float animation-delay-500" />
+            <div className="absolute top-1/2 left-1/3 w-[400px] h-[400px] bg-primary-300/15 rounded-full blur-[80px] animate-float animation-delay-500" />
           </div>
         </div>
 
@@ -272,8 +294,8 @@ export default function Register() {
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className={`p-4 rounded-xl text-center text-sm font-medium ${msg.includes('created')
-                    ? 'bg-success/10 text-success border border-success/20'
-                    : 'bg-danger/10 text-danger border border-danger/20'
+                  ? 'bg-success/10 text-success border border-success/20'
+                  : 'bg-danger/10 text-danger border border-danger/20'
                   }`}
               >
                 {msg}

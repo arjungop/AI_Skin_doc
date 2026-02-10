@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LuPlus, LuX, LuCalendar, LuImage, LuCamera, LuChevronLeft, LuChevronRight, LuHash, LuLayoutGrid, LuScale } from 'react-icons/lu'
+import { LuPlus, LuX, LuCalendar, LuImage, LuCamera, LuChevronLeft, LuChevronRight, LuHash, LuLayoutGrid, LuScale, LuTrash2 } from 'react-icons/lu'
 import { api } from '../services/api'
 import { Card, CardTitle, CardDescription, IconWrapper, CardBadge } from '../components/Card'
 
@@ -30,13 +30,26 @@ export default function SkinJourney() {
     }
 
     const fetchLogs = async () => {
+        setLoading(true)
         try {
             const data = await api.getJourney()
-            setLogs(data)
+            setLogs(Array.isArray(data) ? data : [])
         } catch (err) {
-            console.error(err)
+            console.error('Failed to fetch logs:', err)
+            setLogs([])
         } finally {
             setLoading(false)
+        }
+    }
+
+    const handleDelete = async (logId) => {
+        if (!confirm('Are you sure you want to delete this entry?')) return
+        try {
+            await api.deleteJourneyLog(logId)
+            setLogs(prev => prev.filter(log => log.log_id !== logId))
+        } catch (err) {
+            console.error('Failed to delete log:', err)
+            alert('Failed to delete entry. Please try again.')
         }
     }
 
@@ -89,30 +102,24 @@ export default function SkinJourney() {
 
     return (
         <div className="relative min-h-screen pb-12">
-            {/* Ambient Background */}
-            <div className="fixed inset-0 pointer-events-none z-0">
-                <div className="absolute top-20 right-1/3 w-[500px] h-[500px] bg-accent-500/10 rounded-full blur-[120px] opacity-40" />
-                <div className="absolute bottom-1/4 left-1/4 w-[400px] h-[400px] bg-primary-500/10 rounded-full blur-[100px] opacity-30" />
-            </div>
-
             <div className="relative z-10 max-w-7xl mx-auto space-y-8">
                 {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 lg:pr-72">
                     <div>
-                        <h1 className="text-4xl md:text-5xl font-bold text-text-primary tracking-tight">Skin Journey</h1>
-                        <p className="text-text-tertiary mt-2 text-lg">Track your progress and visualize changes over time</p>
+                        <h1 className="text-4xl md:text-5xl font-bold text-slate-900 tracking-tight">Skin Journey</h1>
+                        <p className="text-slate-500 mt-2 text-lg">Track your progress and visualize changes over time</p>
                     </div>
                     <div className="flex items-center gap-3">
-                        <div className="bg-surface-elevated p-1.5 rounded-2xl flex items-center border border-white/10">
+                        <div className="bg-white p-1.5 rounded-2xl flex items-center border border-slate-200 shadow-sm">
                             <button
                                 onClick={() => setViewMode('gallery')}
-                                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${viewMode === 'gallery' ? 'bg-primary-500/10 text-primary-400 border border-primary-500/30' : 'text-text-secondary hover:text-text-primary'}`}
+                                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${viewMode === 'gallery' ? 'bg-primary-50 text-primary-600 border border-primary-100' : 'text-slate-500 hover:text-slate-900'}`}
                             >
                                 <LuLayoutGrid size={16} /> Gallery
                             </button>
                             <button
                                 onClick={() => setViewMode('compare')}
-                                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${viewMode === 'compare' ? 'bg-accent-500/10 text-accent-400 border border-accent-500/30' : 'text-text-secondary hover:text-text-primary'}`}
+                                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${viewMode === 'compare' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'text-slate-500 hover:text-slate-900'}`}
                             >
                                 <LuScale size={16} /> Compare
                             </button>
@@ -121,7 +128,7 @@ export default function SkinJourney() {
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
                             onClick={() => setShowModal(true)}
-                            className="btn-primary flex items-center gap-2"
+                            className="btn-primary flex items-center gap-2 shadow-lg shadow-primary-500/20"
                         >
                             <LuPlus size={18} /> New Entry
                         </motion.button>
@@ -130,7 +137,7 @@ export default function SkinJourney() {
 
                 {loading ? (
                     <div className="flex items-center justify-center py-20">
-                        <div className="w-10 h-10 border-4 border-white/10 border-t-primary-500 rounded-full animate-spin" />
+                        <div className="w-10 h-10 border-4 border-slate-200 border-t-primary-500 rounded-full animate-spin" />
                     </div>
                 ) : (
                     <>
@@ -144,28 +151,43 @@ export default function SkinJourney() {
                                             animate={{ opacity: 1, y: 0 }}
                                             transition={{ delay: i * 0.05 }}
                                         >
-                                            <Card variant="glass" className="overflow-hidden group" hover>
-                                                <div className="relative aspect-[4/3] bg-surface-elevated overflow-hidden">
+                                            <Card className="overflow-hidden group p-0 pb-4 h-full" hover>
+                                                <div className="relative aspect-[4/3] bg-slate-100 overflow-hidden border-b border-slate-100">
                                                     {log.image_path ? (
                                                         <img src={log.image_path} alt="Skin log" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                                                     ) : (
-                                                        <div className="flex items-center justify-center h-full text-text-muted">
-                                                            <LuImage size={48} className="opacity-30" />
+                                                        <div className="flex items-center justify-center h-full text-slate-300">
+                                                            <LuImage size={48} className="opacity-50" />
                                                         </div>
                                                     )}
-                                                    <div className="absolute top-3 left-3 bg-surface/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-semibold text-text-primary border border-white/10">
-                                                        {new Date(log.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                                    <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-bold text-slate-700 shadow-sm">
+                                                        {log.created_at ? new Date(log.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Unknown date'}
                                                     </div>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleDelete(log.log_id); }}
+                                                        className="absolute top-3 right-3 w-8 h-8 bg-white/90 hover:bg-rose-500 backdrop-blur-sm rounded-full flex items-center justify-center text-slate-400 hover:text-white opacity-0 group-hover:opacity-100 transition-all shadow-sm"
+                                                        title="Delete entry"
+                                                    >
+                                                        <LuTrash2 size={14} />
+                                                    </button>
                                                 </div>
                                                 <div className="p-5">
-                                                    <p className="text-text-secondary text-sm line-clamp-2">{log.notes || "No notes added."}</p>
-                                                    {log.tags && (
-                                                        <div className="flex flex-wrap gap-2 mt-3">
-                                                            {JSON.parse(log.tags).map((tag, idx) => (
-                                                                <CardBadge key={idx} variant="primary">{tag}</CardBadge>
-                                                            ))}
-                                                        </div>
-                                                    )}
+                                                    <p className="text-slate-600 text-sm line-clamp-2 leading-relaxed">{log.notes || "No notes added."}</p>
+                                                    {log.tags && (() => {
+                                                        try {
+                                                            const parsed = JSON.parse(log.tags)
+                                                            if (Array.isArray(parsed) && parsed.length > 0) {
+                                                                return (
+                                                                    <div className="flex flex-wrap gap-2 mt-4">
+                                                                        {parsed.map((tag, idx) => (
+                                                                            <CardBadge key={idx} variant="primary" className="bg-primary-50 text-primary-700 border border-primary-100">{tag}</CardBadge>
+                                                                        ))}
+                                                                    </div>
+                                                                )
+                                                            }
+                                                        } catch { /* Invalid JSON */ }
+                                                        return null
+                                                    })()}
                                                 </div>
                                             </Card>
                                         </motion.div>
@@ -173,10 +195,12 @@ export default function SkinJourney() {
                                 </AnimatePresence>
                                 {logs.length === 0 && (
                                     <div className="col-span-full py-20 text-center">
-                                        <Card variant="glass" className="p-12 border-dashed border-2 border-white/10">
-                                            <LuCamera className="mx-auto mb-4 text-text-muted" size={48} />
-                                            <p className="text-lg font-semibold text-text-primary mb-1">No logs yet</p>
-                                            <p className="text-text-tertiary">Start your skin journey by adding your first entry.</p>
+                                        <Card className="p-12 border-dashed border-2 border-slate-200 bg-slate-50/50 shadow-none">
+                                            <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm border border-slate-100">
+                                                <LuCamera className="text-slate-300" size={32} />
+                                            </div>
+                                            <p className="text-lg font-bold text-slate-900 mb-1">No logs yet</p>
+                                            <p className="text-slate-500">Start your skin journey by adding your first entry.</p>
                                         </Card>
                                     </div>
                                 )}
@@ -184,10 +208,13 @@ export default function SkinJourney() {
                         )}
 
                         {viewMode === 'compare' && (
-                            <Card variant="glass" className="p-8 min-h-[500px] flex items-center justify-center">
+                            <Card className="p-8 min-h-[500px] flex items-center justify-center bg-slate-50/50 border-slate-200">
                                 {logs.length < 2 ? (
-                                    <div className="text-center text-text-tertiary">
-                                        <p className="text-xl font-semibold text-text-primary mb-2">Not enough data to compare</p>
+                                    <div className="text-center text-slate-400">
+                                        <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm border border-slate-100">
+                                            <LuScale size={24} />
+                                        </div>
+                                        <p className="text-xl font-bold text-slate-900 mb-2">Not enough data</p>
                                         <p>You need at least two entries to use the comparison view.</p>
                                     </div>
                                 ) : (
@@ -201,42 +228,42 @@ export default function SkinJourney() {
                 {/* Add Modal */}
                 <AnimatePresence>
                     {showModal && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
                             <motion.div
                                 initial={{ opacity: 0, scale: 0.95 }}
                                 animate={{ opacity: 1, scale: 1 }}
                                 exit={{ opacity: 0, scale: 0.95 }}
-                                className="bg-surface-elevated rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-white/10"
+                                className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl ring-1 ring-slate-900/5"
                             >
-                                <div className="p-6 border-b border-white/10 flex items-center justify-between">
+                                <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                                     <CardTitle className="text-xl">New Daily Log</CardTitle>
-                                    <button onClick={() => setShowModal(false)} className="p-2 hover:bg-white/5 rounded-xl transition-colors">
-                                        <LuX className="text-text-tertiary" size={20} />
+                                    <button onClick={() => setShowModal(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400 hover:text-slate-600">
+                                        <LuX size={20} />
                                     </button>
                                 </div>
 
                                 <form onSubmit={handleSubmit} className="p-6 space-y-6">
                                     {/* Image Upload Area */}
                                     <div className="space-y-2">
-                                        <label className="block text-sm font-semibold text-text-tertiary uppercase tracking-wider">Photo</label>
+                                        <label className="block text-sm font-semibold text-slate-500 uppercase tracking-wider">Photo</label>
                                         <div
-                                            className={`relative aspect-[4/3] rounded-2xl border-2 border-dashed ${previewUrl ? 'border-transparent' : 'border-white/10 hover:border-primary-500/30'} bg-white/5 flex flex-col items-center justify-center transition-all cursor-pointer overflow-hidden group`}
+                                            className={`relative aspect-[4/3] rounded-2xl border-2 border-dashed ${previewUrl ? 'border-transparent' : 'border-slate-200 hover:border-primary-400 hover:bg-slate-50'} bg-slate-50 flex flex-col items-center justify-center transition-all cursor-pointer overflow-hidden group`}
                                             onClick={() => document.getElementById('log-file').click()}
                                         >
                                             {previewUrl ? (
                                                 <>
                                                     <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
-                                                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <p className="text-white font-medium">Change Photo</p>
+                                                    <div className="absolute inset-0 bg-slate-900/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <p className="text-white font-medium flex items-center gap-2"><LuCamera /> Change Photo</p>
                                                     </div>
                                                 </>
                                             ) : (
                                                 <>
-                                                    <div className="p-4 bg-white/5 rounded-2xl border border-white/10 mb-3">
-                                                        <LuCamera className="text-primary-400" size={24} />
+                                                    <div className="p-4 bg-white rounded-full border border-slate-200 mb-3 shadow-sm text-primary-500">
+                                                        <LuCamera size={24} />
                                                     </div>
-                                                    <p className="text-sm font-medium text-text-secondary">Tap to upload</p>
-                                                    <p className="text-xs text-text-muted mt-1">Selfie or close-up</p>
+                                                    <p className="text-sm font-bold text-slate-900">Tap to upload</p>
+                                                    <p className="text-xs text-slate-400 mt-1">Selfie or close-up</p>
                                                 </>
                                             )}
                                             <input
@@ -251,25 +278,25 @@ export default function SkinJourney() {
 
                                     <div className="space-y-4">
                                         <div>
-                                            <label className="block text-sm font-semibold text-text-tertiary uppercase tracking-wider mb-2">Notes</label>
+                                            <label className="block text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2">Notes</label>
                                             <textarea
                                                 value={notes}
                                                 onChange={e => setNotes(e.target.value)}
                                                 placeholder="How does your skin feel today?"
-                                                className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-text-primary placeholder:text-text-muted focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all text-sm min-h-[100px]"
+                                                className="w-full rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-slate-900 placeholder:text-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all text-sm min-h-[100px]"
                                             />
                                         </div>
 
                                         <div>
-                                            <label className="block text-sm font-semibold text-text-tertiary uppercase tracking-wider mb-2">Tags (comma separated)</label>
+                                            <label className="block text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2">Tags (comma separated)</label>
                                             <div className="relative">
-                                                <LuHash className="absolute left-4 top-3.5 text-text-muted" size={16} />
+                                                <LuHash className="absolute left-4 top-3.5 text-slate-400" size={16} />
                                                 <input
                                                     type="text"
                                                     value={tags}
                                                     onChange={e => setTags(e.target.value)}
                                                     placeholder="acne, dry, glowing..."
-                                                    className="w-full pl-10 rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-text-primary placeholder:text-text-muted focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all text-sm"
+                                                    className="w-full pl-10 rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-slate-900 placeholder:text-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all text-sm"
                                                 />
                                             </div>
                                         </div>
@@ -280,7 +307,7 @@ export default function SkinJourney() {
                                         whileTap={{ scale: 0.99 }}
                                         type="submit"
                                         disabled={submitting}
-                                        className="w-full btn-primary py-3.5 font-semibold disabled:opacity-70 disabled:cursor-not-allowed"
+                                        className="w-full btn-primary py-3.5 font-bold shadow-lg shadow-primary-500/20 disabled:opacity-70 disabled:cursor-not-allowed"
                                     >
                                         {submitting ? 'Saving...' : 'Save Entry'}
                                     </motion.button>
@@ -304,11 +331,11 @@ function CompareView({ logs }) {
         <div className="w-full max-w-4xl">
             <div className="flex items-center justify-between mb-6">
                 <div className="w-1/3">
-                    <label className="block text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">Before</label>
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Before</label>
                     <select
                         value={leftIndex}
                         onChange={(e) => setLeftIndex(Number(e.target.value))}
-                        className="w-full p-3 rounded-xl bg-white/5 border border-white/10 text-text-primary text-sm font-medium"
+                        className="w-full p-3 rounded-xl bg-white border border-slate-200 text-slate-900 text-sm font-medium focus:ring-2 focus:ring-primary-500/10 focus:border-primary-500 outline-none"
                     >
                         {sorted.map((log, i) => (
                             <option key={log.log_id} value={i} disabled={i === rightIndex}>
@@ -317,13 +344,13 @@ function CompareView({ logs }) {
                         ))}
                     </select>
                 </div>
-                <div className="text-text-muted font-medium text-lg px-4">vs</div>
+                <div className="text-slate-300 font-medium text-lg px-4">vs</div>
                 <div className="w-1/3 text-right">
-                    <label className="block text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">After</label>
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">After</label>
                     <select
                         value={rightIndex}
                         onChange={(e) => setRightIndex(Number(e.target.value))}
-                        className="w-full p-3 rounded-xl bg-white/5 border border-white/10 text-text-primary text-sm font-medium"
+                        className="w-full p-3 rounded-xl bg-white border border-slate-200 text-slate-900 text-sm font-medium focus:ring-2 focus:ring-primary-500/10 focus:border-primary-500 outline-none"
                     >
                         {sorted.map((log, i) => (
                             <option key={log.log_id} value={i} disabled={i === leftIndex}>
@@ -334,7 +361,7 @@ function CompareView({ logs }) {
                 </div>
             </div>
 
-            <div className="relative aspect-[16/9] w-full bg-surface-elevated rounded-2xl overflow-hidden border border-white/10 select-none cursor-ew-resize group"
+            <div className="relative aspect-[16/9] w-full bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 select-none cursor-ew-resize group shadow-inner"
                 onMouseMove={(e) => {
                     const rect = e.currentTarget.getBoundingClientRect()
                     const x = ((e.clientX - rect.left) / rect.width) * 100
@@ -346,7 +373,7 @@ function CompareView({ logs }) {
 
                 {/* Left Image (Foreground with Clip) */}
                 <div
-                    className="absolute inset-0 overflow-hidden border-r-4 border-primary-500 shadow-xl"
+                    className="absolute inset-0 overflow-hidden border-r-4 border-white shadow-xl"
                     style={{ width: `${position}%` }}
                 >
                     <img src={sorted[leftIndex].image_path} className="absolute inset-0 w-full h-full max-w-none object-cover" style={{ width: '100vw', maxWidth: 'unset' }} alt="Before" />
@@ -354,22 +381,22 @@ function CompareView({ logs }) {
 
                 {/* Handle */}
                 <div
-                    className="absolute top-0 bottom-0 bg-primary-500/50 w-1 cursor-col-resize z-10 flex items-center justify-center pointer-events-none"
+                    className="absolute top-0 bottom-0 bg-white/30 backdrop-blur-[2px] w-1 cursor-col-resize z-10 flex items-center justify-center pointer-events-none"
                     style={{ left: `${position}%` }}
                 >
-                    <div className="w-10 h-10 bg-surface-elevated rounded-xl shadow-lg flex items-center justify-center -ml-5 border border-white/20 text-text-secondary">
+                    <div className="w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center -ml-5 border border-slate-100 text-slate-400">
                         <div className="flex gap-0.5">
-                            <LuChevronLeft size={14} />
-                            <LuChevronRight size={14} />
+                            <LuChevronLeft size={16} />
+                            <LuChevronRight size={16} />
                         </div>
                     </div>
                 </div>
 
                 {/* Overlay Dates */}
-                <div className="absolute top-4 left-4 bg-black/50 text-white text-xs px-3 py-1.5 rounded-lg backdrop-blur-md border border-white/10">
+                <div className="absolute top-4 left-4 bg-white/90 text-slate-900 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm border border-white/50">
                     {new Date(sorted[leftIndex].created_at).toLocaleDateString()}
                 </div>
-                <div className="absolute bottom-4 right-4 bg-black/50 text-white text-xs px-3 py-1.5 rounded-lg backdrop-blur-md border border-white/10">
+                <div className="absolute bottom-4 right-4 bg-white/90 text-slate-900 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm border border-white/50">
                     {new Date(sorted[rightIndex].created_at).toLocaleDateString()}
                 </div>
             </div>

@@ -45,6 +45,10 @@ export default function Onboarding() {
                     cancer_history: data.cancer_history
                 })
             }
+            // Store in localStorage for dashboard
+            localStorage.setItem('skin_type', data.skin_type)
+            localStorage.setItem('onboarding_complete', 'true')
+
             await api.updateProfile(payload)
             window.location.href = '/dashboard'
         } catch (err) {
@@ -72,10 +76,10 @@ export default function Onboarding() {
 
     return (
         <div className="min-h-screen relative flex items-center justify-center p-6 overflow-hidden">
-            {/* Background Ambience */}
-            <div className="fixed top-0 left-0 w-full h-full overflow-hidden pointer-events-none -z-10 bg-background">
+            {/* Background Ambience - Light theme */}
+            <div className="fixed top-0 left-0 w-full h-full overflow-hidden pointer-events-none -z-10 bg-slate-50">
                 <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-primary-500/10 rounded-full blur-[120px]" />
-                <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-accent-500/10 rounded-full blur-[150px]" />
+                <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-sky-500/10 rounded-full blur-[150px]" />
             </div>
 
             <div className="max-w-2xl w-full relative z-10">
@@ -83,7 +87,7 @@ export default function Onboarding() {
                 <div className="mb-8 px-1">
                     <div className="flex gap-2 mb-4">
                         {STEPS.map((s, i) => (
-                            <div key={s.id} className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${i <= step ? 'bg-gradient-to-r from-primary-500 to-accent-500' : 'bg-white/10'}`} />
+                            <div key={s.id} className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${i <= step ? 'bg-gradient-to-r from-primary-500 to-emerald-500' : 'bg-slate-200'}`} />
                         ))}
                     </div>
                     <motion.div
@@ -93,17 +97,17 @@ export default function Onboarding() {
                         className="flex justify-between items-end"
                     >
                         <div>
-                            <h2 className="text-3xl font-bold text-text-primary tracking-tight">{STEPS[step].title}</h2>
-                            <p className="text-text-secondary mt-1">{STEPS[step].desc}</p>
+                            <h2 className="text-3xl font-bold text-slate-900 tracking-tight">{STEPS[step].title}</h2>
+                            <p className="text-slate-500 mt-1">{STEPS[step].desc}</p>
                         </div>
-                        <span className="text-xs font-bold text-text-tertiary bg-white/5 px-2 py-1 rounded-md border border-white/5">
+                        <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-md border border-slate-200">
                             STEP {step + 1}/{STEPS.length}
                         </span>
                     </motion.div>
                 </div>
 
-                {/* Card */}
-                <Card variant="glass" className="min-h-[450px] relative overflow-hidden flex flex-col p-8 md:p-10 shadow-2xl shadow-primary-500/5">
+                {/* Card - Clean white card */}
+                <Card className="min-h-[450px] relative overflow-hidden flex flex-col p-8 md:p-10 shadow-xl border-slate-200">
                     <div className="flex-1">
                         <AnimatePresence mode="wait">
                             <motion.div
@@ -117,7 +121,7 @@ export default function Onboarding() {
                                 {step === 0 && (
                                     <div className="space-y-8">
                                         <div>
-                                            <label className="text-sm font-medium text-text-secondary mb-3 block">Age Range</label>
+                                            <label className="text-sm font-medium text-slate-600 mb-3 block">Age Range</label>
                                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                                                 {['Under 18', '18–25', '26–35', '36–50', '50+'].map(opt => (
                                                     <SelectBtn key={opt} active={data.age_range === opt} onClick={() => update('age_range', opt)}>{opt}</SelectBtn>
@@ -125,7 +129,7 @@ export default function Onboarding() {
                                             </div>
                                         </div>
                                         <div>
-                                            <label className="text-sm font-medium text-text-secondary mb-3 block">Gender (Optional)</label>
+                                            <label className="text-sm font-medium text-slate-600 mb-3 block">Gender (Optional)</label>
                                             <div className="flex gap-4">
                                                 <SelectBtn active={data.gender === 'Female'} onClick={() => update('gender', 'Female')}><FaVenus /> Female</SelectBtn>
                                                 <SelectBtn active={data.gender === 'Male'} onClick={() => update('gender', 'Male')}><FaMars /> Male</SelectBtn>
@@ -137,7 +141,7 @@ export default function Onboarding() {
                                 {step === 1 && (
                                     <div className="space-y-8">
                                         <div>
-                                            <label className="text-sm font-medium text-text-secondary mb-3 block">How does your skin feel usually?</label>
+                                            <label className="text-sm font-medium text-slate-600 mb-3 block">How does your skin feel usually?</label>
                                             <div className="grid grid-cols-2 gap-3">
                                                 {['Oily', 'Dry', 'Combination', 'Normal'].map(t => (
                                                     <SelectBtn key={t} active={data.skin_type === t} onClick={() => update('skin_type', t)}>{t}</SelectBtn>
@@ -145,7 +149,7 @@ export default function Onboarding() {
                                             </div>
                                         </div>
                                         <div>
-                                            <label className="text-sm font-medium text-text-secondary mb-3 block">Sensitivity Level</label>
+                                            <label className="text-sm font-medium text-slate-600 mb-3 block">Sensitivity Level</label>
                                             <div className="flex flex-col gap-3">
                                                 <SelectBtn active={data.sensitivity === 'High'} onClick={() => update('sensitivity', 'High')}>
                                                     <div className="flex items-center justify-between w-full">
@@ -169,20 +173,20 @@ export default function Onboarding() {
 
                                 {step === 2 && (
                                     <div>
-                                        <label className="text-sm font-medium text-text-secondary mb-4 block">Select your primary concerns</label>
+                                        <label className="text-sm font-medium text-slate-600 mb-4 block">Select your primary concerns</label>
                                         <div className="grid grid-cols-2 gap-3">
                                             {['Acne', 'Pigmentation', 'Wrinkles', 'Redness', 'Uneven Tone', 'Dark Circles', 'Pores', 'Dryness'].map(c => (
                                                 <button
                                                     key={c}
                                                     onClick={() => toggleConcern(c)}
                                                     className={`p-4 rounded-xl text-left transition-all border ${data.concerns.includes(c)
-                                                            ? 'bg-primary-500/20 text-text-primary border-primary-500/50 shadow-[0_0_15px_rgba(var(--color-primary-500),0.2)]'
-                                                            : 'bg-white/5 text-text-secondary border-white/5 hover:bg-white/10 hover:border-white/10'
+                                                        ? 'bg-primary-50 text-slate-900 border-primary-300 shadow-sm'
+                                                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
                                                         }`}
                                                 >
                                                     <div className="flex justify-between items-center">
                                                         <span className="font-medium">{c}</span>
-                                                        {data.concerns.includes(c) && <FaCheck className="text-primary-400" />}
+                                                        {data.concerns.includes(c) && <FaCheck className="text-primary-500" />}
                                                     </div>
                                                 </button>
                                             ))}
@@ -193,7 +197,7 @@ export default function Onboarding() {
                                 {step === 3 && (
                                     <div className="space-y-8">
                                         <div>
-                                            <label className="text-sm font-medium text-text-secondary mb-3 block">Daily Sun Exposure</label>
+                                            <label className="text-sm font-medium text-slate-600 mb-3 block">Daily Sun Exposure</label>
                                             <div className="grid grid-cols-3 gap-3">
                                                 {['Low', 'Moderate', 'High'].map(o => (
                                                     <SelectBtn key={o} active={data.sun_exposure === o} onClick={() => update('sun_exposure', o)}>{o}</SelectBtn>
@@ -201,37 +205,37 @@ export default function Onboarding() {
                                             </div>
                                         </div>
                                         <div>
-                                            <label className="text-sm font-medium text-text-secondary mb-3 block">Sunscreen Usage</label>
+                                            <label className="text-sm font-medium text-slate-600 mb-3 block">Sunscreen Usage</label>
                                             <div className="grid grid-cols-3 gap-3">
                                                 {['Daily', 'Sometimes', 'Never'].map(o => (
                                                     <SelectBtn key={o} active={data.sunscreen === o} onClick={() => update('sunscreen', o)}>{o}</SelectBtn>
                                                 ))}
                                             </div>
                                         </div>
-                                        <label className="flex items-center gap-4 p-4 bg-white/5 border border-white/5 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">
-                                            <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${data.smoke ? 'bg-primary-500 border-primary-500' : 'border-text-muted bg-transparent'}`}>
+                                        <label className="flex items-center gap-4 p-4 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors">
+                                            <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${data.smoke ? 'bg-primary-500 border-primary-500' : 'border-slate-300 bg-white'}`}>
                                                 {data.smoke && <FaCheck className="text-white text-xs" />}
                                             </div>
                                             <input type="checkbox" className="hidden" checked={data.smoke} onChange={e => update('smoke', e.target.checked)} />
-                                            <span className="font-medium text-text-primary">I smoke regularly</span>
+                                            <span className="font-medium text-slate-900">I smoke regularly</span>
                                         </label>
                                     </div>
                                 )}
 
                                 {step === 4 && (
                                     <div className="space-y-6">
-                                        <div className="p-5 bg-warning/10 border border-warning/20 rounded-xl flex gap-4 text-warning">
-                                            <FaShieldAlt className="mt-1 flex-shrink-0 text-xl" />
+                                        <div className="p-5 bg-amber-50 border border-amber-200 rounded-xl flex gap-4 text-amber-800">
+                                            <FaShieldAlt className="mt-1 flex-shrink-0 text-xl text-amber-600" />
                                             <p className="text-sm leading-relaxed">This information helps our AI prioritize specific screenings during automated scans. Your privacy is paramount.</p>
                                         </div>
-                                        <label className="flex items-center gap-4 p-4 bg-white/5 border border-white/5 rounded-xl cursor-pointer hover:bg-white/10 transition-colors group">
-                                            <div className={`w-6 h-6 rounded border flex items-center justify-center transition-colors ${data.cancer_history ? 'bg-primary-500 border-primary-500' : 'border-text-muted bg-transparent'}`}>
+                                        <label className="flex items-center gap-4 p-4 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors group">
+                                            <div className={`w-6 h-6 rounded border flex items-center justify-center transition-colors ${data.cancer_history ? 'bg-primary-500 border-primary-500' : 'border-slate-300 bg-white'}`}>
                                                 {data.cancer_history && <FaCheck className="text-white text-xs" />}
                                             </div>
                                             <input type="checkbox" className="hidden" checked={data.cancer_history} onChange={e => update('cancer_history', e.target.checked)} />
                                             <div>
-                                                <div className="font-medium text-text-primary group-hover:text-primary-400 transition-colors">Family History of Skin Cancer</div>
-                                                <div className="text-xs text-text-muted">Immediate family members only</div>
+                                                <div className="font-medium text-slate-900 group-hover:text-primary-600 transition-colors">Family History of Skin Cancer</div>
+                                                <div className="text-xs text-slate-500">Immediate family members only</div>
                                             </div>
                                         </label>
                                     </div>
@@ -241,16 +245,16 @@ export default function Onboarding() {
                                     <div className="text-center py-12">
                                         <div className="relative w-24 h-24 mx-auto mb-8">
                                             <div className="absolute inset-0 bg-primary-500/20 rounded-full blur-xl animate-pulse" />
-                                            <div className="relative w-full h-full bg-surface-elevated rounded-full border border-white/10 flex items-center justify-center text-primary-400">
+                                            <div className="relative w-full h-full bg-white rounded-full border border-slate-200 shadow-lg flex items-center justify-center text-primary-500">
                                                 <LuSun size={40} className="animate-spin-slow" />
                                             </div>
                                         </div>
-                                        <h3 className="text-2xl font-bold mb-3 text-text-primary">Analyzing Environment...</h3>
-                                        <p className="text-text-secondary mb-8">
-                                            {data.location_city ? <span className="text-success flex items-center justify-center gap-2"><FaCheck /> Detected: {data.location_city}</span> : 'Requesting location permission...'}
+                                        <h3 className="text-2xl font-bold mb-3 text-slate-900">Analyzing Environment...</h3>
+                                        <p className="text-slate-500 mb-8">
+                                            {data.location_city ? <span className="text-emerald-600 flex items-center justify-center gap-2"><FaCheck /> Detected: {data.location_city}</span> : 'Requesting location permission...'}
                                         </p>
                                         {!data.location_city && (
-                                            <button className="text-sm text-text-muted hover:text-text-primary underline" onClick={() => update('location_city', 'Skipped')}>Skip Location</button>
+                                            <button className="text-sm text-slate-400 hover:text-slate-600 underline" onClick={() => update('location_city', 'Skipped')}>Skip Location</button>
                                         )}
                                     </div>
                                 )}
@@ -259,11 +263,11 @@ export default function Onboarding() {
                     </div>
 
                     {/* Footer Controls */}
-                    <div className="mt-10 pt-6 border-t border-white/10 flex justify-end">
+                    <div className="mt-10 pt-6 border-t border-slate-100 flex justify-end">
                         <button
                             onClick={handleNext}
                             disabled={loading}
-                            className="btn-primary px-8 py-3 shadow-lg shadow-primary-500/20 flex items-center gap-2"
+                            className="btn btn-primary px-8 py-3 shadow-lg shadow-primary-500/20 flex items-center gap-2"
                         >
                             {loading ? 'Finalizing...' : (step === STEPS.length - 1 ? 'Finish' : 'Next Step')}
                             {!loading && <FaArrowRight />}
@@ -281,8 +285,8 @@ function SelectBtn({ active, children, onClick }) {
             onClick={onClick}
             className={`px-4 py-3 rounded-xl font-medium text-sm transition-all border flex items-center justify-center gap-2
         ${active
-                    ? 'bg-primary-500/20 text-text-primary border-primary-500/50 shadow-[0_0_15px_rgba(var(--color-primary-500),0.2)]'
-                    : 'bg-white/5 text-text-secondary border-white/5 hover:border-white/10 hover:bg-white/10'
+                    ? 'bg-primary-50 text-primary-700 border-primary-300 shadow-sm'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-100'
                 }`}
         >
             {children}

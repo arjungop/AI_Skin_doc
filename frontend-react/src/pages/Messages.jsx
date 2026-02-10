@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../services/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  LuSend, LuPlus, LuImage, LuFile, LuSmile, LuMoreVertical,
+  LuSend, LuPlus, LuImage, LuFile, LuSmile,
   LuPhone, LuVideo, LuInfo, LuSearch, LuX, LuLoader, LuCheck,
   LuCheckCheck, LuTrash2, LuCornerUpLeft
 } from 'react-icons/lu'
@@ -107,23 +107,22 @@ export default function Messages() {
     <div className="h-[calc(100vh-100px)] flex gap-6 overflow-hidden relative">
       {/* Sidebar background blobs */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
-        <div className="absolute top-10 left-10 w-64 h-64 bg-primary-500/10 rounded-full blur-[80px]" />
-        <div className="absolute bottom-10 right-10 w-64 h-64 bg-accent-500/10 rounded-full blur-[80px]" />
+        <div className="absolute top-10 left-10 w-64 h-64 bg-primary-100/40 rounded-full blur-[80px]" />
+        <div className="absolute bottom-10 right-10 w-64 h-64 bg-secondary-100/40 rounded-full blur-[80px]" />
       </div>
 
       {/* Sidebar */}
       <Card
-        variant="glass"
         className={`flex flex-col w-full md:w-80 h-full p-0 transition-all absolute md:relative z-20 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
         hover={false}
       >
-        <div className="p-4 border-b border-white/10 flex items-center justify-between">
-          <h2 className="font-bold text-lg text-text-primary">Messages</h2>
+        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+          <h2 className="font-bold text-lg text-slate-900">Messages</h2>
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
             onClick={() => setShowNewConversation(true)}
-            className="w-8 h-8 rounded-lg bg-primary-500/20 text-primary-400 flex items-center justify-center hover:bg-primary-500/30 transition-colors"
+            className="w-8 h-8 rounded-lg bg-primary-50 text-primary-500 flex items-center justify-center hover:bg-primary-100 transition-colors"
           >
             <LuPlus size={18} />
           </motion.button>
@@ -131,9 +130,9 @@ export default function Messages() {
 
         <div className="p-3">
           <div className="relative">
-            <LuSearch className="absolute left-3 top-2.5 text-text-muted" size={16} />
+            <LuSearch className="absolute left-3 top-2.5 text-slate-400" size={16} />
             <input
-              className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-9 pr-4 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary-500/50 transition-all"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 pl-9 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all"
               placeholder="Search conversations..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
@@ -143,30 +142,30 @@ export default function Messages() {
 
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {isLoading ? (
-            <div className="flex justify-center p-4"><LuLoader className="animate-spin text-text-muted" /></div>
+            <div className="flex justify-center p-4"><LuLoader className="animate-spin text-slate-400" /></div>
           ) : rooms.length === 0 ? (
-            <div className="text-center text-text-muted p-4 text-sm">No conversations yet</div>
+            <div className="text-center text-slate-400 p-4 text-sm">No conversations yet</div>
           ) : (
             rooms.map(room => (
               <motion.button
                 key={room.room_id}
                 onClick={() => openRoom(room)}
-                whileHover={{ backgroundColor: 'rgba(255,255,255,0.05)' }}
-                className={`w-full text-left p-3 rounded-xl flex items-center gap-3 transition-colors ${activeRoom?.room_id === room.room_id ? 'bg-primary-500/10 border border-primary-500/20' : 'border border-transparent'}`}
+                whileHover={{ backgroundColor: 'rgba(241,245,249,1)' }}
+                className={`w-full text-left p-3 rounded-xl flex items-center gap-3 transition-colors ${activeRoom?.room_id === room.room_id ? 'bg-primary-50 border border-primary-200' : 'border border-transparent hover:bg-slate-50'}`}
               >
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-600 flex items-center justify-center flex-shrink-0 text-white font-bold text-sm">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center flex-shrink-0 text-white font-bold text-sm">
                   {getParticipantName(room).charAt(0)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <span className={`font-semibold text-sm truncate ${activeRoom?.room_id === room.room_id ? 'text-primary-400' : 'text-text-primary'}`}>
+                    <span className={`font-semibold text-sm truncate ${activeRoom?.room_id === room.room_id ? 'text-primary-600' : 'text-slate-900'}`}>
                       {getParticipantName(room)}
                     </span>
-                    <span className="text-xs text-text-muted">
+                    <span className="text-xs text-slate-400">
                       {new Date(room.last_message_at || room.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                     </span>
                   </div>
-                  <p className="text-xs text-text-secondary truncate mt-0.5">
+                  <p className="text-xs text-slate-500 truncate mt-0.5">
                     {room.last_message?.content || 'No messages yet'}
                   </p>
                 </div>
@@ -179,39 +178,39 @@ export default function Messages() {
       {/* Chat Area */}
       <div className={`flex-1 flex flex-col h-full relative z-10 transition-all ${!sidebarOpen ? 'w-full' : 'hidden md:flex'}`}>
         {activeRoom ? (
-          <Card variant="glass" className="h-full flex flex-col p-0 overflow-hidden" hover={false}>
+          <Card className="h-full flex flex-col p-0 overflow-hidden" hover={false}>
             {/* Header */}
-            <div className="p-4 border-b border-white/10 flex items-center justify-between bg-surface-elevated/50 backdrop-blur-md">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white/80 backdrop-blur-md">
               <div className="flex items-center gap-3">
-                <button onClick={() => setSidebarOpen(true)} className="md:hidden p-2 -ml-2 text-text-secondary">
+                <button onClick={() => setSidebarOpen(true)} className="md:hidden p-2 -ml-2 text-slate-500">
                   <LuCornerUpLeft size={20} />
                 </button>
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-bold shadow-lg shadow-primary-500/20">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-bold shadow-lg shadow-primary-500/20">
                   {getParticipantName(activeRoom).charAt(0)}
                 </div>
                 <div>
-                  <h3 className="font-bold text-text-primary">{getParticipantName(activeRoom)}</h3>
+                  <h3 className="font-bold text-slate-900">{getParticipantName(activeRoom)}</h3>
                   <div className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-xs text-text-muted">Online</span>
+                    <span className="text-xs text-slate-400">Online</span>
                   </div>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <button className="p-2 text-text-secondary hover:text-text-primary hover:bg-white/5 rounded-lg transition-colors">
+                <button className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
                   <LuPhone size={20} />
                 </button>
-                <button className="p-2 text-text-secondary hover:text-text-primary hover:bg-white/5 rounded-lg transition-colors">
+                <button className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
                   <LuVideo size={20} />
                 </button>
-                <button className="p-2 text-text-secondary hover:text-text-primary hover:bg-white/5 rounded-lg transition-colors">
+                <button className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
                   <LuInfo size={20} />
                 </button>
               </div>
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-transparent">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50">
               {messages.map((msg, i) => {
                 const isMe = msg.sender_user_id === currentUserId
                 return (
@@ -223,10 +222,10 @@ export default function Messages() {
                   >
                     <div className={`max-w-[70%] p-3.5 rounded-2xl text-sm leading-relaxed ${isMe
                       ? 'bg-primary-500 text-white rounded-tr-none shadow-lg shadow-primary-500/20'
-                      : 'bg-surface-elevated border border-white/10 text-text-primary rounded-tl-none'
+                      : 'bg-white border border-slate-100 text-slate-900 rounded-tl-none shadow-sm'
                       }`}>
                       <p>{msg.content}</p>
-                      <div className={`text-[10px] mt-1 flex items-center justify-end gap-1 ${isMe ? 'text-white/70' : 'text-text-muted'}`}>
+                      <div className={`text-[10px] mt-1 flex items-center justify-end gap-1 ${isMe ? 'text-white/70' : 'text-slate-400'}`}>
                         {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         {isMe && <LuCheckCheck size={12} />}
                       </div>
@@ -238,19 +237,19 @@ export default function Messages() {
             </div>
 
             {/* Input */}
-            <div className="p-4 bg-surface-elevated/50 border-t border-white/10">
+            <div className="p-4 bg-white border-t border-slate-100">
               <form onSubmit={sendMessage} className="flex gap-3 items-end">
-                <button type="button" className="p-3 text-text-secondary hover:text-text-primary hover:bg-white/5 rounded-xl transition-colors">
+                <button type="button" className="p-3 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors">
                   <LuPlus size={20} />
                 </button>
-                <div className="flex-1 bg-white/5 border border-white/10 rounded-2xl flex items-center px-4 py-2 focus-within:ring-2 focus-within:ring-primary-500/20 focus-within:border-primary-500/50 transition-all">
+                <div className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl flex items-center px-4 py-2 focus-within:ring-2 focus-within:ring-primary-500/20 focus-within:border-primary-500 transition-all">
                   <input
-                    className="flex-1 bg-transparent border-none focus:outline-none py-2 text-sm text-text-primary placeholder:text-text-muted"
+                    className="flex-1 bg-transparent border-none focus:outline-none py-2 text-sm text-slate-900 placeholder:text-slate-400"
                     placeholder="Type a message..."
                     value={messageText}
                     onChange={e => setMessageText(e.target.value)}
                   />
-                  <button type="button" className="p-2 text-text-secondary hover:text-text-primary transition-colors">
+                  <button type="button" className="p-2 text-slate-400 hover:text-slate-700 transition-colors">
                     <LuSmile size={20} />
                   </button>
                 </div>
@@ -268,11 +267,11 @@ export default function Messages() {
           </Card>
         ) : (
           <div className="h-full flex flex-col items-center justify-center text-center p-6 opacity-60">
-            <div className="w-20 h-20 rounded-3xl bg-surface-elevated border border-white/10 flex items-center justify-center mb-6">
-              <LuImage className="text-text-muted" size={40} />
+            <div className="w-20 h-20 rounded-3xl bg-slate-100 border border-slate-200 flex items-center justify-center mb-6">
+              <LuImage className="text-slate-400" size={40} />
             </div>
-            <h3 className="text-xl font-bold text-text-primary mb-2">Select a Conversation</h3>
-            <p className="text-text-tertiary max-w-sm">Choose a chat from the sidebar to start messaging your doctor or patient.</p>
+            <h3 className="text-xl font-bold text-slate-900 mb-2">Select a Conversation</h3>
+            <p className="text-slate-400 max-w-sm">Choose a chat from the sidebar to start messaging your doctor or patient.</p>
           </div>
         )}
       </div>

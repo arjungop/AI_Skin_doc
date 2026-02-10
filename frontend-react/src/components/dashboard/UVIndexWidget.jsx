@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { LuSun, LuShield, LuMapPin, LuLoader } from 'react-icons/lu'
+import { LuSun, LuShield, LuMapPin, LuLoader, LuShieldAlert } from 'react-icons/lu'
 import { Card } from '../Card'
 
 export default function UVIndexWidget({ location }) {
@@ -32,21 +32,21 @@ export default function UVIndexWidget({ location }) {
     }
 
     const getRiskLevel = (val) => {
-        if (val === null) return { text: 'Unknown', color: 'text-text-muted', bg: 'bg-white/5' }
-        if (val <= 2) return { text: 'Low', color: 'text-success', bg: 'bg-success/10' }
-        if (val <= 5) return { text: 'Moderate', color: 'text-warning', bg: 'bg-warning/10' }
-        if (val <= 7) return { text: 'High', color: 'text-orange-400', bg: 'bg-orange-400/10' }
-        if (val <= 10) return { text: 'Very High', color: 'text-danger', bg: 'bg-danger/10' }
-        return { text: 'Extreme', color: 'text-pink-500', bg: 'bg-pink-500/10' }
+        if (val === null) return { text: 'Unknown', color: 'text-slate-400', bg: 'bg-slate-100' }
+        if (val <= 2) return { text: 'Low', color: 'text-emerald-600', bg: 'bg-emerald-100' }
+        if (val <= 5) return { text: 'Moderate', color: 'text-amber-500', bg: 'bg-amber-100' }
+        if (val <= 7) return { text: 'High', color: 'text-orange-500', bg: 'bg-orange-100' }
+        if (val <= 10) return { text: 'Very High', color: 'text-rose-600', bg: 'bg-rose-100' }
+        return { text: 'Extreme', color: 'text-purple-600', bg: 'bg-purple-100' }
     }
 
     const getSPFRecommendation = (val) => {
         if (val === null) return 'Enable location for UV data'
-        if (val <= 2) return '✓ Low exposure today'
-        if (val <= 5) return '☀️ SPF 30 recommended'
-        if (val <= 7) return '☀️ Wear SPF 50+'
-        if (val <= 10) return '⚠️ SPF 50+ & seek shade'
-        return '🚨 Avoid sun exposure!'
+        if (val <= 2) return 'Low exposure today'
+        if (val <= 5) return 'SPF 30 recommended'
+        if (val <= 7) return 'Wear SPF 50+'
+        if (val <= 10) return 'SPF 50+ & seek shade'
+        return 'Avoid sun exposure!'
     }
 
     const risk = getRiskLevel(uv)
@@ -54,13 +54,13 @@ export default function UVIndexWidget({ location }) {
     // Show prompt to enable location if not available
     if (!location) {
         return (
-            <Card variant="glass" className="h-full" hover={false}>
+            <Card className="h-full" hover={false}>
                 <div className="flex flex-col items-center justify-center h-full py-4 text-center">
-                    <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center border border-white/10 mb-3">
-                        <LuSun className="text-text-muted" size={22} />
+                    <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center border border-slate-200 mb-3">
+                        <LuSun className="text-slate-400" size={22} />
                     </div>
-                    <p className="text-sm text-text-secondary font-medium mb-1">Location Required</p>
-                    <p className="text-xs text-text-muted">Enable location to see UV index</p>
+                    <p className="text-sm text-slate-500 font-medium mb-1">Location Required</p>
+                    <p className="text-xs text-slate-400">Enable location to see UV index</p>
                 </div>
             </Card>
         )
@@ -68,7 +68,7 @@ export default function UVIndexWidget({ location }) {
 
     if (loading) {
         return (
-            <Card variant="glass" className="h-full" hover={false}>
+            <Card className="h-full" hover={false}>
                 <div className="flex items-center justify-center h-full py-8">
                     <LuLoader className="animate-spin text-primary-400" size={24} />
                 </div>
@@ -77,24 +77,30 @@ export default function UVIndexWidget({ location }) {
     }
 
     return (
-        <Card variant="glass" className="h-full" hover={false}>
+        <Card className="h-full" hover={false}>
             <div className="flex items-start justify-between">
-                <div>
-                    <div className="text-xs uppercase tracking-widest text-text-tertiary font-medium mb-3">
+                <div className="w-full">
+                    <div className="text-xs uppercase tracking-widest text-slate-400 font-medium mb-4">
                         UV Index
                     </div>
-                    <div className="flex items-baseline gap-3 mb-3">
-                        <span className="font-mono text-4xl font-bold text-text-primary">{uv ?? '--'}</span>
-                        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${risk.bg} ${risk.color} uppercase tracking-wider`}>
-                            {risk.text}
-                        </span>
+
+                    <div className="flex items-start justify-between w-full mb-6">
+                        <div className="flex flex-col">
+                            <span className="text-5xl font-bold text-slate-800 tracking-tight leading-none mb-1">{uv ?? '--'}</span>
+                            <span className={`inline-flex self-start px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${risk.bg} ${risk.color}`}>
+                                {risk.text}
+                            </span>
+                        </div>
+
+                        <div className={`w-12 h-12 rounded-2xl ${risk.bg} flex items-center justify-center ${risk.color} flex-shrink-0`}>
+                            {uv !== null && uv > 5 ? <LuShieldAlert size={24} /> : <LuSun size={24} />}
+                        </div>
                     </div>
-                    <p className="text-sm text-text-secondary font-medium">
-                        {getSPFRecommendation(uv)}
-                    </p>
-                </div>
-                <div className={`w-12 h-12 rounded-2xl ${risk.bg} flex items-center justify-center ${risk.color}`}>
-                    {uv !== null && uv > 5 ? <LuSun size={24} /> : <LuShield size={24} />}
+
+                    <div className="flex items-center gap-2 text-sm text-slate-600 font-medium bg-slate-50 p-3 rounded-xl">
+                        <LuShield className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                        <span>{getSPFRecommendation(uv)}</span>
+                    </div>
                 </div>
             </div>
         </Card>

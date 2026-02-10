@@ -57,7 +57,7 @@ export default function Transactions() {
       case 'pending': return 'warning'
       case 'failed': return 'danger'
       case 'refunded': return 'primary'
-      default: return 'secondary'
+      default: return 'default'
     }
   }
 
@@ -66,8 +66,8 @@ export default function Transactions() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-text-primary">Transactions</h1>
-          <p className="text-text-secondary mt-1">Manage your payments and billing history</p>
+          <h1 className="text-3xl font-bold text-slate-900">Transactions</h1>
+          <p className="text-slate-500 mt-1">Manage your payments and billing history</p>
         </div>
         <div className="flex gap-2">
           <a href={`${api.base}/transactions/export.csv`} target="_blank" rel="noreferrer" className="btn-secondary flex items-center gap-2">
@@ -82,61 +82,61 @@ export default function Transactions() {
       {/* Summary Cards */}
       {summary && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card variant="glass" className="p-5">
+          <Card className="p-5" hover={false}>
             <div className="flex items-center gap-3 mb-2">
-              <IconWrapper variant="warning" size="sm"><LuRefreshCcw size={16} /></IconWrapper>
-              <h3 className="text-sm font-medium text-text-tertiary">Pending</h3>
+              <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center"><LuRefreshCcw size={16} /></div>
+              <h3 className="text-sm font-medium text-slate-400">Pending</h3>
             </div>
-            <p className="text-2xl font-bold text-text-primary">₹ {summary.pending.toFixed(2)}</p>
+            <p className="text-2xl font-bold text-slate-900">₹ {summary.pending.toFixed(2)}</p>
           </Card>
-          <Card variant="glass" className="p-5">
+          <Card className="p-5" hover={false}>
             <div className="flex items-center gap-3 mb-2">
-              <IconWrapper variant="success" size="sm"><LuCheck size={16} /></IconWrapper>
-              <h3 className="text-sm font-medium text-text-tertiary">Completed</h3>
+              <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center"><LuCheck size={16} /></div>
+              <h3 className="text-sm font-medium text-slate-400">Completed</h3>
             </div>
-            <p className="text-2xl font-bold text-text-primary">₹ {summary.completed.toFixed(2)}</p>
+            <p className="text-2xl font-bold text-slate-900">₹ {summary.completed.toFixed(2)}</p>
           </Card>
-          <Card variant="glass" className="p-5">
+          <Card className="p-5" hover={false}>
             <div className="flex items-center gap-3 mb-2">
-              <IconWrapper variant="danger" size="sm"><LuX size={16} /></IconWrapper>
-              <h3 className="text-sm font-medium text-text-tertiary">Failed</h3>
+              <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center"><LuX size={16} /></div>
+              <h3 className="text-sm font-medium text-slate-400">Failed</h3>
             </div>
-            <p className="text-2xl font-bold text-text-primary">₹ {summary.failed.toFixed(2)}</p>
+            <p className="text-2xl font-bold text-slate-900">₹ {summary.failed.toFixed(2)}</p>
           </Card>
-          <Card variant="glass" className="p-5">
+          <Card className="p-5" hover={false}>
             <div className="flex items-center gap-3 mb-2">
               <IconWrapper variant="primary" size="sm"><LuWallet size={16} /></IconWrapper>
-              <h3 className="text-sm font-medium text-text-tertiary">Total Count</h3>
+              <h3 className="text-sm font-medium text-slate-400">Total Count</h3>
             </div>
-            <p className="text-2xl font-bold text-text-primary">{summary.count}</p>
+            <p className="text-2xl font-bold text-slate-900">{summary.count}</p>
           </Card>
         </div>
       )}
 
       {/* Filters */}
-      <Card variant="glass" className="p-4" hover={false}>
+      <Card className="p-4" hover={false}>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <div className="lg:col-span-2 relative">
-            <LuSearch className="absolute left-3 top-3 text-text-muted" />
+            <LuSearch className="absolute left-3 top-3 text-slate-400" />
             <input
-              className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary-500/50"
+              className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10"
               placeholder="Search by ID or reference..."
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
           </div>
           <div className="relative">
-            <LuCalendar className="absolute left-3 top-3 text-text-muted" />
+            <LuCalendar className="absolute left-3 top-3 text-slate-400" />
             <input
               type="date"
-              className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-text-primary focus:outline-none focus:border-primary-500/50"
+              className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-sm text-slate-900 focus:outline-none focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10"
               value={start}
               onChange={e => setStart(e.target.value)}
             />
           </div>
           <div>
             <select
-              className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 px-4 text-sm text-text-primary focus:outline-none focus:border-primary-500/50"
+              className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-4 text-sm text-slate-900 focus:outline-none focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10"
               value={category}
               onChange={e => setCategory(e.target.value)}
             >
@@ -149,7 +149,7 @@ export default function Transactions() {
           </div>
           <div>
             <select
-              className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 px-4 text-sm text-text-primary focus:outline-none focus:border-primary-500/50"
+              className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-4 text-sm text-slate-900 focus:outline-none focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10"
               value={filter}
               onChange={e => setFilter(e.target.value)}
             >
@@ -173,17 +173,17 @@ export default function Transactions() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
             >
-              <Card variant="elevated" className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 group">
+              <Card className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 group">
                 <div className="flex items-center gap-4 w-full md:w-auto">
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold ${t.status === 'completed' ? 'bg-success/10 text-success' :
-                      t.status === 'failed' ? 'bg-danger/10 text-danger' :
-                        'bg-warning/10 text-warning'
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold ${t.status === 'completed' ? 'bg-emerald-50 text-emerald-600' :
+                    t.status === 'failed' ? 'bg-rose-50 text-rose-600' :
+                      'bg-amber-50 text-amber-600'
                     }`}>
                     {t.status === 'completed' ? '✓' : t.status === 'failed' ? '!' : '⟳'}
                   </div>
                   <div>
-                    <h3 className="font-semibold text-text-primary">₹ {t.amount}</h3>
-                    <p className="text-xs text-text-secondary flex items-center gap-1.5">
+                    <h3 className="font-semibold text-slate-900">₹ {t.amount}</h3>
+                    <p className="text-xs text-slate-500 flex items-center gap-1.5">
                       <span className="capitalize">{t.category}</span> • <span>{new Date(t.created_at).toLocaleDateString()}</span>
                     </p>
                   </div>
@@ -191,8 +191,8 @@ export default function Transactions() {
 
                 <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
                   <div className="text-right hidden md:block">
-                    <p className="text-sm text-text-primary font-medium">{t.method || 'N/A'}</p>
-                    <p className="text-xs text-text-muted font-mono">{t.transaction_id}</p>
+                    <p className="text-sm text-slate-700 font-medium">{t.method || 'N/A'}</p>
+                    <p className="text-xs text-slate-400 font-mono">{t.transaction_id}</p>
                   </div>
 
                   <div className="flex items-center gap-3">
@@ -201,7 +201,7 @@ export default function Transactions() {
                       href={`${api.base}/transactions/${t.transaction_id}/receipt.pdf`}
                       target="_blank"
                       rel="noreferrer"
-                      className="p-2 text-text-secondary hover:text-primary-400 hover:bg-white/5 rounded-lg transition-colors"
+                      className="p-2 text-slate-400 hover:text-primary-500 hover:bg-slate-50 rounded-lg transition-colors"
                       title="Download Receipt"
                     >
                       <LuFileText size={18} />
@@ -213,12 +213,12 @@ export default function Transactions() {
           ))}
         </AnimatePresence>
 
-        {loading && <div className="text-center py-10 text-text-muted">Loading transactions...</div>}
+        {loading && <div className="text-center py-10 text-slate-400">Loading transactions...</div>}
         {!loading && list.length === 0 && (
-          <div className="text-center py-20 bg-white/5 rounded-3xl border border-white/10 border-dashed">
-            <LuWallet className="mx-auto mb-4 text-text-muted" size={48} />
-            <h3 className="text-xl font-bold text-text-primary">No transactions found</h3>
-            <p className="text-text-tertiary">Adjust filters or create a new transaction.</p>
+          <div className="text-center py-20 bg-slate-50 rounded-3xl border border-slate-200 border-dashed">
+            <LuWallet className="mx-auto mb-4 text-slate-300" size={48} />
+            <h3 className="text-xl font-bold text-slate-900">No transactions found</h3>
+            <p className="text-slate-400">Adjust filters or create a new transaction.</p>
           </div>
         )}
       </div>

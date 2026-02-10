@@ -4,206 +4,175 @@ import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   FaHome, FaStethoscope, FaComments, FaCalendarAlt,
-  FaMoneyBillWave, FaEnvelope, FaUserMd, FaSignOutAlt
+  FaMoneyBillWave, FaEnvelope, FaUserMd, FaSignOutAlt, FaCog
 } from 'react-icons/fa'
-import { LuScan, LuSparkles, LuUser, LuMessageCircle, LuMapPin, LuHeart, LuX } from 'react-icons/lu'
+import { LuScan, LuSparkles, LuUser, LuMessageCircle, LuMapPin, LuHeart, LuX, LuMenu, LuActivity } from 'react-icons/lu'
 
 export default function AppShell({ children }) {
   const loc = useLocation()
   const role = (localStorage.getItem('role') || '').toUpperCase()
   const loggedIn = !!role
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
   const onLogout = (e) => { e.preventDefault(); localStorage.clear(); location.href = '/login' }
-  const [showProfileMenu, setShowProfileMenu] = useState(false)
-
-  useEffect(() => { document.documentElement.classList.remove('dark'); }, [])
-
   const name = (localStorage.getItem('username') || 'User')
   const initials = name.split(' ').map(s => s[0]).join('').slice(0, 2).toUpperCase()
+
+  useEffect(() => { document.documentElement.classList.remove('dark'); }, [])
+  useEffect(() => { setMobileMenuOpen(false) }, [loc.pathname])
 
   if (!loggedIn) {
     return <ToastProvider>{children}</ToastProvider>
   }
 
-  // Navigation items
   const navItems = role === 'ADMIN' ? [
     { to: '/admin', icon: FaHome, label: 'Overview' },
     { to: '/admin/transactions', icon: FaMoneyBillWave, label: 'Transactions' },
   ] : [
-    { to: '/dashboard', icon: FaHome, label: 'Dashboard' },
-    { to: '/lesions', icon: LuScan, label: 'AI Scan', isAI: true },
-    { to: '/coach', icon: LuSparkles, label: 'Coach', isNew: true },
-    { to: '/chat', icon: LuMessageCircle, label: 'AI Chat', isAI: true },
-    { to: '/journey', icon: LuHeart, label: 'Journey', isNew: true },
-    { to: '/routine', icon: FaStethoscope, label: 'Routine' },
-    { to: '/find-doctors', icon: LuMapPin, label: 'Doctors', isNew: true },
-    'divider',
-    { to: '/appointments', icon: FaCalendarAlt, label: 'Appointments' },
-    { to: '/messages', icon: FaEnvelope, label: 'Messages' },
-    { to: '/transactions', icon: FaMoneyBillWave, label: 'Payments' },
+    {
+      label: 'Overview', items: [
+        { to: '/dashboard', icon: FaHome, label: 'Dashboard' },
+        { to: '/journey', icon: LuHeart, label: 'Skin Journey', isNew: true },
+      ]
+    },
+    {
+      label: 'AI Health', items: [
+        { to: '/lesions', icon: LuScan, label: 'Lesion Scan', isAI: true },
+        { to: '/chat', icon: LuMessageCircle, label: 'AI Assistant', isAI: true },
+        { to: '/coach', icon: LuSparkles, label: 'Skin Coach', isNew: true },
+      ]
+    },
+    {
+      label: 'Care', items: [
+        { to: '/appointments', icon: FaCalendarAlt, label: 'Appointments' },
+        { to: '/routine', icon: FaStethoscope, label: 'Daily Routine' },
+        { to: '/find-doctors', icon: LuMapPin, label: 'Find Doctors' },
+        { to: '/messages', icon: FaEnvelope, label: 'Messages' },
+      ]
+    },
   ]
 
-  const mobileNavItems = [
-    { to: '/dashboard', icon: FaHome, label: 'Home' },
-    { to: '/lesions', icon: LuScan, label: 'Scan', isAI: true },
-    { to: '/chat', icon: LuMessageCircle, label: 'AI', isAI: true },
-    { to: '/appointments', icon: FaCalendarAlt, label: 'Book' },
-  ]
+  const SidebarContent = () => (
+    <div className="flex flex-col h-full">
+      {/* Brand */}
+      <div className="p-6 flex items-center gap-3">
+        <div className="w-8 h-8 rounded-lg bg-primary-500 flex items-center justify-center text-white">
+          <LuActivity size={18} />
+        </div>
+        <span className="text-lg font-bold text-slate-900 tracking-tight">Skin.AI</span>
+      </div>
+
+      {/* Navigation */}
+      <div className="flex-1 overflow-y-auto px-4 py-2 space-y-8">
+        {navItems.map((group, i) => (
+          <div key={i}>
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 px-2">
+              {group.label}
+            </h3>
+            <div className="space-y-1">
+              {group.items?.map(item => (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${loc.pathname === item.to
+                      ? 'bg-primary-50 text-primary-700'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                    }`}
+                >
+                  <item.icon size={18} className={loc.pathname === item.to ? 'text-primary-500' : 'text-slate-400 group-hover:text-slate-600'} />
+                  <span>{item.label}</span>
+                  {item.isNew && (
+                    <span className="ml-auto text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">NEW</span>
+                  )}
+                  {item.isAI && (
+                    <span className="ml-auto text-[10px] font-bold text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">AI</span>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* User Profile */}
+      <div className="p-4 border-t border-slate-100">
+        <div className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group">
+          <div className="w-9 h-9 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center text-sm font-bold">
+            {initials}
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-slate-900">{name}</p>
+            <p className="text-xs text-slate-500 capitalize">{role.toLowerCase()}</p>
+          </div>
+          <button
+            onClick={onLogout}
+            className="text-slate-400 hover:text-rose-500 transition-colors p-1"
+            title="Sign out"
+          >
+            <FaSignOutAlt size={16} />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 
   return (
     <ToastProvider>
-      <div className="relative min-h-screen">
-        {/* Desktop Dock - Left Side */}
-        <motion.nav
-          initial={{ x: -100, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-          className="hidden lg:flex dock left-6 top-1/2 -translate-y-1/2 flex-col gap-1"
-        >
-          {navItems.map((item, i) =>
-            item === 'divider' ? (
-              <div key={i} className="h-px bg-white/10 my-2 mx-2" />
-            ) : (
-              <DockIcon
-                key={item.to}
-                to={item.to}
-                icon={item.icon}
-                active={loc.pathname === item.to}
-                label={item.label}
-                isNew={item.isNew}
-                isAI={item.isAI}
-              />
-            )
-          )}
-        </motion.nav>
+      <div className="min-h-screen bg-slate-50 flex">
+        {/* Desktop Sidebar */}
+        <aside className="hidden lg:block w-64 bg-white border-r border-slate-200 fixed inset-y-0 z-50">
+          <SidebarContent />
+        </aside>
 
-        {/* Mobile Dock - Bottom */}
-        <motion.nav
-          initial={{ y: 100, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-          className="lg:hidden dock bottom-6 left-1/2 -translate-x-1/2 gap-1"
-        >
-          {mobileNavItems.map(item => (
-            <DockIcon
-              key={item.to}
-              to={item.to}
-              icon={item.icon}
-              active={loc.pathname === item.to}
-              label={item.label}
-              isAI={item.isAI}
-              mobile
-            />
-          ))}
-          <button
-            onClick={() => setShowProfileMenu(!showProfileMenu)}
-            className={`dock-icon ${showProfileMenu ? 'active' : ''}`}
-          >
-            <LuUser size={20} />
+        {/* Mobile Header */}
+        <div className="lg:hidden fixed top-0 inset-x-0 z-40 bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-primary-500 flex items-center justify-center text-white">
+              <LuActivity size={18} />
+            </div>
+            <span className="font-bold text-slate-900">Skin.AI</span>
+          </div>
+          <button onClick={() => setMobileMenuOpen(true)} className="p-2 text-slate-600">
+            <LuMenu size={24} />
           </button>
-        </motion.nav>
+        </div>
 
-        {/* Mobile Profile Menu */}
+        {/* Mobile Sidebar Overlay */}
         <AnimatePresence>
-          {showProfileMenu && (
-            <motion.div
-              initial={{ opacity: 0, y: 20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 20, scale: 0.95 }}
-              transition={{ duration: 0.2 }}
-              className="lg:hidden fixed bottom-28 left-1/2 -translate-x-1/2 card-glass p-5 z-50 min-w-[220px]"
-            >
-              <button
-                onClick={() => setShowProfileMenu(false)}
-                className="absolute top-3 right-3 text-text-tertiary hover:text-text-primary transition-colors"
+          {mobileMenuOpen && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setMobileMenuOpen(false)}
+                className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm lg:hidden"
+              />
+              <motion.div
+                initial={{ x: '-100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '-100%' }}
+                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                className="fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-xl lg:hidden"
               >
-                <LuX size={18} />
-              </button>
-              <div className="text-center mb-4 pt-2">
-                <div className="h-14 w-14 mx-auto rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-bold text-white text-lg mb-3">
-                  {initials}
+                <div className="absolute top-2 right-2">
+                  <button onClick={() => setMobileMenuOpen(false)} className="p-2 text-slate-400 hover:text-slate-600">
+                    <LuX size={20} />
+                  </button>
                 </div>
-                <p className="text-text-primary font-semibold">{name}</p>
-                <p className="text-xs text-text-tertiary capitalize">{role.toLowerCase()}</p>
-              </div>
-              <button
-                onClick={onLogout}
-                className="w-full btn-ghost text-sm py-3 flex items-center justify-center gap-2"
-              >
-                <FaSignOutAlt size={14} />
-                Sign Out
-              </button>
-            </motion.div>
+                <SidebarContent />
+              </motion.div>
+            </>
           )}
         </AnimatePresence>
 
-        {/* Desktop Header - Top Right */}
-        <header className="fixed top-6 right-6 z-40 hidden lg:flex items-center gap-4">
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="card-glass px-5 py-3 flex items-center gap-4"
-          >
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-bold text-white text-sm">
-              {initials}
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-text-primary tracking-tight">{name}</p>
-              <p className="text-xs text-text-tertiary capitalize">{role.toLowerCase()}</p>
-            </div>
-            <button
-              onClick={onLogout}
-              className="ml-2 p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-white/5 transition-all"
-              title="Sign Out"
-            >
-              <FaSignOutAlt size={16} />
-            </button>
-          </motion.div>
-        </header>
-
         {/* Main Content */}
-        <main className="min-h-screen pt-6 pb-32 lg:pb-12 px-6 lg:pl-32">
-          <div className="max-w-[1600px] mx-auto">
+        <main className="flex-1 lg:pl-64 min-h-screen">
+          <div className="max-w-6xl mx-auto px-4 py-8 lg:px-8 mt-14 lg:mt-0">
             {children}
           </div>
         </main>
       </div>
     </ToastProvider>
-  )
-}
-
-function DockIcon({ to, icon: Icon, active, label, isNew, isAI, mobile }) {
-  const [showTooltip, setShowTooltip] = useState(false)
-
-  return (
-    <div className="relative">
-      <Link
-        to={to}
-        onMouseEnter={() => setShowTooltip(true)}
-        onMouseLeave={() => setShowTooltip(false)}
-        className={`dock-icon ${active ? 'active' : ''} ${isAI && active ? '!text-ai-400 !bg-ai-500/10' : ''}`}
-      >
-        <Icon size={mobile ? 18 : 20} />
-        {isNew && (
-          <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-accent-500 border-2 border-surface-elevated animate-pulse" />
-        )}
-      </Link>
-
-      {/* Desktop Tooltip */}
-      <AnimatePresence>
-        {showTooltip && !mobile && (
-          <motion.div
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -10 }}
-            className="absolute left-full ml-4 top-1/2 -translate-y-1/2 card-glass px-3 py-2 text-xs font-medium text-text-primary whitespace-nowrap pointer-events-none hidden lg:block"
-          >
-            {label}
-            {isNew && (
-              <span className="ml-2 text-accent-400 uppercase text-[10px] font-bold">NEW</span>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
   )
 }

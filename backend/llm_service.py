@@ -57,10 +57,10 @@ def _gemini_chat(messages: List[Dict[str, str]]) -> str:
         # Combine all parts into a single prompt
         full_prompt = "\n\n".join(prompt_parts)
         
-        # Configure generation parameters
+        # Configure generation parameters for fast responses
         generation_config = genai.types.GenerationConfig(
-            temperature=float(os.getenv("LLM_TEMPERATURE", "0.2")),
-            max_output_tokens=2048,
+            temperature=float(os.getenv("LLM_TEMPERATURE", "0.1")),
+            max_output_tokens=1024,  # Faster responses with shorter limit
         )
         
         response = model.generate_content(
@@ -104,10 +104,10 @@ def _gemini_chat_stream(messages: List[Dict[str, str]]):
         
         full_prompt = "\n\n".join(prompt_parts)
         
-        # Configure generation parameters
+        # Configure generation parameters for fast streaming
         generation_config = genai.types.GenerationConfig(
-            temperature=float(os.getenv("LLM_TEMPERATURE", "0.2")),
-            max_output_tokens=2048,
+            temperature=float(os.getenv("LLM_TEMPERATURE", "0.1")),
+            max_output_tokens=1024,  # Faster responses
         )
         
         # Use streaming response

@@ -12,10 +12,10 @@ export default function QuickPrescription() {
     const [selected, setSelected] = useState(null)
 
     return (
-        <Card variant="glass" className="h-full p-6" hover={false}>
+        <Card className="h-full p-6" hover={false}>
             <div className="flex justify-between items-center mb-5">
                 <CardTitle>Quick Prescriptions</CardTitle>
-                <button className="h-8 w-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-text-tertiary hover:text-primary-400 hover:bg-primary-500/10 hover:border-primary-500/30 transition-all">
+                <button className="h-8 w-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 hover:text-primary-500 hover:bg-primary-50 hover:border-primary-200 transition-all">
                     <FaPlus size={12} />
                 </button>
             </div>
@@ -24,16 +24,16 @@ export default function QuickPrescription() {
                     <div
                         key={t.id}
                         className={`p-4 rounded-xl border cursor-pointer transition-all ${selected === t.id
-                                ? 'border-primary-500/50 bg-primary-500/10'
-                                : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
+                            ? 'border-primary-300 bg-primary-50'
+                            : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-slate-100'
                             }`}
                         onClick={() => setSelected(t.id)}
                     >
                         <div className="flex justify-between items-center mb-1">
-                            <span className="font-semibold text-sm text-text-primary">{t.name}</span>
-                            {selected === t.id && <FaCheck className="text-primary-400" size={12} />}
+                            <span className="font-semibold text-sm text-slate-900">{t.name}</span>
+                            {selected === t.id && <FaCheck className="text-primary-500" size={12} />}
                         </div>
-                        <div className="text-xs text-text-tertiary leading-relaxed">
+                        <div className="text-xs text-slate-400 leading-relaxed">
                             {t.meds.join(', ')}
                         </div>
                     </div>
@@ -41,8 +41,8 @@ export default function QuickPrescription() {
             </div>
             <button
                 className={`w-full mt-5 py-3 rounded-xl font-semibold text-sm transition-all ${selected
-                        ? 'btn-primary'
-                        : 'bg-white/5 text-text-muted cursor-not-allowed border border-white/10'
+                    ? 'btn-primary'
+                    : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
                     }`}
                 disabled={!selected}
             >

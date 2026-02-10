@@ -3,7 +3,7 @@ import { api } from '../services/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LuUpload, LuScan, LuTriangleAlert, LuZap, LuDownload,
-  LuArrowRight, LuHistory, LuCircleCheck, LuShield, LuSparkles, LuX
+  LuArrowRight, LuHistory, LuCircleCheck, LuShield, LuSparkles, LuX, LuLoader, LuFileText, LuClock
 } from 'react-icons/lu'
 import { Card, CardTitle, CardDescription, CardData, CardBadge, IconWrapper } from '../components/Card'
 
@@ -21,16 +21,48 @@ export default function LesionUpload() {
   const [highSensitivity, setHighSensitivity] = useState(true)
   const [dragActive, setDragActive] = useState(false)
 
+  // Previous scans state
+  const [previousScans, setPreviousScans] = useState([])
+  const [loadingHistory, setLoadingHistory] = useState(true)
+
+  // Fetch previous scans on mount
+  useEffect(() => {
+    fetchPreviousScans()
+  }, [])
+
+  const fetchPreviousScans = async () => {
+    setLoadingHistory(true)
+    try {
+      const pid = role === 'ADMIN' ? null : patientId
+      const reports = await api.listDiagnosisReports(pid)
+      setPreviousScans(Array.isArray(reports) ? reports.slice(0, 5) : []) // Show last 5
+    } catch (err) {
+      console.error('Failed to fetch previous scans:', err)
+      setPreviousScans([])
+    } finally {
+      setLoadingHistory(false)
+    }
+  }
+
   const onSubmit = async (e) => {
     e.preventDefault()
     setRes(null); setDiag(''); setError(''); setReport(null); setLoading(true)
     const pid = role === 'ADMIN' ? parseInt(overridePatientId || '0') : patientId
-    if (!pid) { setError('Select a patient first'); setLoading(false); return }
-    if (!file) { setError('Select an image'); setLoading(false); return }
+    if (!pid || isNaN(pid)) {
+      setError(role === 'ADMIN' ? 'Please enter a valid patient ID' : 'Patient profile not found. Please log in again.')
+      setLoading(false)
+      return
+    }
+    if (!file) { setError('Please select an image to analyze'); setLoading(false); return }
     try {
       const result = await api.predictLesion(pid, file, { sensitivity: highSensitivity ? 'high' : undefined })
       setRes(result)
-    } catch (err) { setError(err.message || 'Upload failed') }
+      // Update scan count for dashboard
+      const currentCount = parseInt(localStorage.getItem('scan_count') || '0')
+      localStorage.setItem('scan_count', (currentCount + 1).toString())
+      // Refresh history
+      fetchPreviousScans()
+    } catch (err) { setError(err.message || 'Analysis failed. Please try again.') }
     setLoading(false)
   }
 
@@ -41,6 +73,7 @@ export default function LesionUpload() {
       const rep = await api.createDiagnosisReport(res.lesion_id, pid)
       setReport(rep)
       setDiag(rep.details || '')
+      fetchPreviousScans() // Refresh history after creating report
     } catch (err) { setDiag(String(err.message || err)) }
   }
 
@@ -66,117 +99,168 @@ export default function LesionUpload() {
 
   return (
     <div className="min-h-screen pb-20 relative">
-      {/* Ambient Background */}
-      <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute top-1/4 right-1/4 w-[500px] h-[500px] bg-ai-500/10 rounded-full blur-[150px] opacity-40" />
-        <div className="absolute bottom-1/4 left-1/4 w-[400px] h-[400px] bg-accent-500/10 rounded-full blur-[120px] opacity-30" />
-      </div>
-
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mb-10 relative z-10 max-w-5xl mx-auto pt-6"
+        className="mb-8 relative z-10 max-w-5xl mx-auto pt-6"
       >
         <div className="flex items-center gap-4 mb-4">
-          <IconWrapper variant="ai" size="lg">
+          <IconWrapper variant="primary" size="lg" className="bg-primary-50 text-primary-600">
             <LuScan size={28} />
           </IconWrapper>
           <div>
-            <h1 className="text-4xl font-bold text-text-primary">
-              AI <span className="text-gradient-ai">Lesion</span> Analysis
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+              AI Lesion Analysis
             </h1>
-            <p className="text-text-secondary">Clinical-grade dermatological classification</p>
+            <p className="text-slate-500">Clinical-grade dermatological assessment powered by Deep Learning</p>
           </div>
         </div>
       </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-5xl mx-auto relative z-10">
-        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
-          <Card variant="glass" className="h-full">
+        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
+          <Card>
             <CardTitle>Upload Scan</CardTitle>
             <CardDescription>Upload a clear, close-up image of the skin area.</CardDescription>
 
             <form onSubmit={onSubmit} className="mt-6 space-y-6">
               {role === 'ADMIN' && (
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">Patient ID Override</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Patient ID Override</label>
                   <input
                     type="number"
                     value={overridePatientId}
                     onChange={e => setOverridePatientId(e.target.value)}
-                    className="w-full bg-surface-elevated border border-white/10 rounded-xl px-4 py-3 text-text-primary focus:border-ai-500/50 focus:ring-2 focus:ring-ai-500/20 outline-none transition-all"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/10 outline-none transition-all"
                     placeholder="Enter Patient ID"
                   />
                 </div>
               )}
 
               <div
-                className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer ${dragActive ? 'border-ai-500 bg-ai-500/10' : 'border-white/10 hover:border-ai-500/30 hover:bg-white/5'
+                className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer ${dragActive ? 'border-primary-500 bg-primary-50' : 'border-slate-200 hover:border-primary-300 hover:bg-slate-50'
                   }`}
                 onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop}
                 onClick={() => document.getElementById('lesion-file').click()}
               >
                 {preview ? (
-                  <div className="relative aspect-video rounded-xl overflow-hidden mx-auto max-w-sm group">
+                  <div className="relative aspect-video rounded-xl overflow-hidden mx-auto max-w-sm group shadow-sm border border-slate-200">
                     <img src={preview} alt="Preview" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="absolute inset-0 bg-slate-900/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                       <p className="text-white font-medium flex items-center gap-2"><LuUpload /> Change Image</p>
                     </div>
                   </div>
                 ) : (
                   <div className="py-8">
-                    <div className="w-16 h-16 rounded-full bg-white/5 mx-auto flex items-center justify-center mb-4">
-                      <LuUpload className="text-ai-400" size={32} />
+                    <div className="w-16 h-16 rounded-full bg-slate-100 mx-auto flex items-center justify-center mb-4 text-primary-500">
+                      <LuUpload size={32} />
                     </div>
-                    <p className="text-text-primary font-medium">Click to upload or drag & drop</p>
-                    <p className="text-xs text-text-muted mt-2">JPG, PNG up to 10MB</p>
+                    <p className="text-slate-900 font-medium">Click to upload or drag & drop</p>
+                    <p className="text-xs text-slate-400 mt-2">JPG, PNG up to 10MB</p>
                   </div>
                 )}
                 <input id="lesion-file" type="file" onChange={e => setFile(e.target.files[0])} className="hidden" accept="image/*" />
               </div>
 
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-orange-500/10 border border-orange-500/20">
-                <LuTriangleAlert className="text-orange-400 flex-shrink-0" />
+              <div className="flex items-center gap-3 p-4 rounded-xl bg-amber-50 border border-amber-100">
+                <LuTriangleAlert className="text-amber-500 flex-shrink-0" size={20} />
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-text-primary">High Sensitivity Mode</p>
-                  <p className="text-xs text-text-muted">May increase false positives, recommended for initial screening.</p>
+                  <p className="text-sm font-semibold text-slate-900">High Sensitivity Mode</p>
+                  <p className="text-xs text-slate-500">Prioritizes detection of potential issues. Recommended for screening.</p>
                 </div>
                 <input
                   type="checkbox"
                   checked={highSensitivity}
                   onChange={e => setHighSensitivity(e.target.checked)}
-                  className="w-5 h-5 rounded border-white/20 bg-white/10 text-ai-500 focus:ring-ai-500/50"
+                  className="w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
                 />
               </div>
 
-              {error && <div className="p-3 rounded-xl bg-danger/10 text-danger text-sm text-center font-medium">{error}</div>}
+              {error && <div className="p-3 rounded-xl bg-rose-50 border border-rose-100 text-rose-600 text-sm text-center font-medium">{error}</div>}
 
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 type="submit"
                 disabled={loading}
-                className="w-full btn-primary py-4 text-base font-bold shadow-lg shadow-ai-500/20 flex items-center justify-center gap-2"
+                className="w-full btn btn-primary py-4 text-base font-bold shadow-lg shadow-primary-500/20 flex items-center justify-center gap-2"
               >
                 {loading ? <LuLoader className="animate-spin" /> : <><LuZap /> Analyze Lesion</>}
               </motion.button>
             </form>
+          </Card>
+
+          {/* Previous Scans Section */}
+          <Card>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <LuHistory className="text-slate-400" size={18} />
+                <CardTitle className="text-base">Previous Scans</CardTitle>
+              </div>
+              {previousScans.length > 0 && (
+                <span className="text-xs text-slate-400 font-medium">{previousScans.length} reports</span>
+              )}
+            </div>
+
+            {loadingHistory ? (
+              <div className="py-8 text-center text-slate-400">
+                <LuLoader className="animate-spin mx-auto mb-2" size={24} />
+                <p className="text-sm">Loading history...</p>
+              </div>
+            ) : previousScans.length === 0 ? (
+              <div className="py-8 text-center text-slate-400">
+                <LuClock className="mx-auto mb-2 opacity-50" size={28} />
+                <p className="text-sm">No previous scans yet</p>
+                <p className="text-xs mt-1">Your scan history will appear here</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {previousScans.map((scan, i) => (
+                  <motion.div
+                    key={scan.id || i}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    className="p-3 rounded-xl bg-slate-50 border border-slate-100 hover:border-slate-200 transition-all"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-slate-900 text-sm">
+                          {scan.prediction || scan.summary || 'Lesion Analysis'}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {scan.created_at ? new Date(scan.created_at).toLocaleDateString() : 'Recent'}
+                        </p>
+                      </div>
+                      <CardBadge variant={
+                        (scan.prediction || '').toLowerCase().includes('melanoma') ? 'danger' :
+                          (scan.prediction || '').toLowerCase().includes('benign') ? 'success' : 'default'
+                      } className="text-xs">
+                        {scan.risk_level || 'Analyzed'}
+                      </CardBadge>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
           </Card>
         </motion.div>
 
         <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
           <AnimatePresence mode="wait">
             {!res ? (
-              <Card variant="glass" className="h-full flex items-center justify-center text-center p-8 opacity-60">
+              <Card className="h-full flex items-center justify-center text-center p-8 bg-slate-50/50 border-dashed border-2 border-slate-200 shadow-none">
                 <div>
-                  <LuSparkles className="text-text-muted mx-auto mb-4" size={48} />
-                  <h3 className="text-xl font-bold text-text-primary mb-2">Ready for Analysis</h3>
-                  <p className="text-text-tertiary">Results will appear here with AI confidence scores and recommendations.</p>
+                  <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300 shadow-sm border border-slate-100">
+                    <LuSparkles size={32} />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-900 mb-2">Ready for Analysis</h3>
+                  <p className="text-slate-500 max-w-xs mx-auto">Upload an image to receive instant AI diagnostics and recommendations.</p>
                 </div>
               </Card>
             ) : (
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-                <Card variant="glow-ai">
+                <Card className="border-l-4 border-l-primary-500">
                   <div className="flex items-start justify-between mb-6">
                     <div>
                       <CardTitle>Analysis Results</CardTitle>
@@ -187,36 +271,46 @@ export default function LesionUpload() {
                     </CardBadge>
                   </div>
 
-                  <div className="space-y-4">
-                    <CardData label="Lesion Severity" value={res.severity || 'Moderate'} />
-                    <CardData label="Risk Assessment" value={res.risk_level || 'Attention Recommended'} />
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-2 gap-4">
+                      <CardData label="Severity" size="sm">{res.severity || 'Moderate'}</CardData>
+                      <CardData label="Risk Level" size="sm">{res.risk_level || 'Attention Recommended'}</CardData>
+                    </div>
 
-                    <div className="pt-4 border-t border-white/10">
-                      <h4 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-2">AI Recommendation</h4>
-                      <p className="text-text-primary leading-relaxed">{res.recommendation || 'Consult a dermatologist for further evaluation.'}</p>
+                    <div className="pt-6 border-t border-slate-100">
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">AI Recommendation</h4>
+                      <div className="p-4 bg-slate-50 rounded-xl text-slate-700 leading-relaxed border border-slate-100">
+                        {res.recommendation || 'Consult a dermatologist for further evaluation.'}
+                      </div>
                     </div>
                   </div>
                 </Card>
 
                 {res.lesion_id && (
-                  <Card variant="glass">
-                    <CardTitle>Clinical Report</CardTitle>
-                    <div className="mt-4">
+                  <Card>
+                    <div className="flex items-center gap-3 mb-4">
+                      <IconWrapper variant="default" size="sm">
+                        <LuFileText size={20} />
+                      </IconWrapper>
+                      <CardTitle>Clinical Report</CardTitle>
+                    </div>
+
+                    <div className="mt-2">
                       {!report ? (
                         <button
                           onClick={runDiagnosis}
-                          className="w-full py-3 bg-surface-elevated hover:bg-white/5 border border-white/10 rounded-xl text-text-primary transition-all flex items-center justify-center gap-2 font-medium"
+                          className="w-full py-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-slate-700 transition-all flex items-center justify-center gap-2 font-medium shadow-sm hover:shadow-md"
                         >
-                          <LuFileText /> Generate Diagnosis Report
+                          <LuSparkles className="text-violet-500" /> Generate Detailed Report
                         </button>
                       ) : (
                         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
-                          <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-sm leading-relaxed text-text-secondary max-h-60 overflow-y-auto">
+                          <div className="p-5 rounded-xl bg-slate-50 border border-slate-100 text-sm leading-relaxed text-slate-600 max-h-60 overflow-y-auto whitespace-pre-wrap font-mono text-xs">
                             {diag}
                           </div>
-                          <button className="w-full btn-ghost flex items-center justify-center gap-2">
-                            <LuDownload size={18} /> Download PDF Report
-                          </button>
+                          <p className="text-xs text-slate-400 text-center">
+                            Share this report with your dermatologist for professional evaluation.
+                          </p>
                         </div>
                       )}
                     </div>
@@ -228,22 +322,5 @@ export default function LesionUpload() {
         </motion.div>
       </div>
     </div>
-  )
-}
-
-function LuFileText(props) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="20" height="20" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-    >
-      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-      <polyline points="14 2 14 8 20 8" />
-      <line x1="16" y1="13" x2="8" y2="13" />
-      <line x1="16" y1="17" x2="8" y2="17" />
-      <line x1="10" y1="9" x2="8" y2="9" />
-    </svg>
   )
 }
