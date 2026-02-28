@@ -1,0 +1,12 @@
+# Ignore data and model artifacts
+datasets/
+data/
+checkpoints/
+logs/
+runs/
+eval_results/
+__pycache__/
+*.pyc
+*.pth
+*.egg-info/
+.env
