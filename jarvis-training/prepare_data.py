@@ -243,10 +243,36 @@ def process_isic2019(datasets_dir: Path) -> list[tuple[Path, str]]:
         print("    [SKIP] ISIC 2019 CSV not found")
         return []
 
-    images_dir = find_dir(base, "ISIC_2019_Training_Input", "images", "train")
+    # Actual structure: ISIC_2019_Training_Input/ISIC_2019_Training_Input/*.jpg
+    # Search recursively for the folder containing .jpg files
+    images_dir = None
+    for candidate in [
+        base / "ISIC_2019_Training_Input" / "ISIC_2019_Training_Input",
+        base / "ISIC_2019_Training_Input",
+        base / "images",
+        base / "train",
+        base,
+    ]:
+        if candidate.is_dir():
+            # Check if it has images directly
+            if any(p.suffix.lower() in {".jpg", ".jpeg", ".png"}
+                   for p in candidate.iterdir() if p.is_file()):
+                images_dir = candidate
+                break
+            # Check one level deeper
+            for sub in candidate.iterdir():
+                if sub.is_dir() and any(
+                    p.suffix.lower() in {".jpg", ".jpeg", ".png"}
+                    for p in sub.iterdir() if p.is_file()
+                ):
+                    images_dir = sub
+                    break
+            if images_dir:
+                break
+
     if images_dir is None:
-        # Images might be directly in base
-        images_dir = base
+        print("    [SKIP] ISIC 2019 image directory not found")
+        return []
 
     df = pd.read_csv(csv_path)
     samples = []
@@ -371,57 +397,82 @@ def process_dermnet(datasets_dir: Path) -> list[tuple[Path, str]]:
 
 
 def process_pad_ufes(datasets_dir: Path) -> list[tuple[Path, str]]:
-    """Process PAD-UFES-20 dataset."""
+    """Process PAD-UFES-20 dataset.
+    
+    Actual structure:
+      metadata.csv  (columns: diagnostic, img_id, ...)
+      imgs_part_1/  (images like PAT_1516_1765_530.png)
+      imgs_part_2/
+      imgs_part_3/
+    """
     base = datasets_dir / "pad_ufes_20"
     if not base.exists():
         print("    [SKIP] PAD-UFES-20 not found")
         return []
 
+    pad_labels = {
+        "ACK": "ak", "BCC": "bcc", "MEL": "melanoma",
+        "NEV": "nevus", "SCC": "scc", "SEK": "seborrheic_keratosis",
+    }
+
     samples = []
 
-    # Try folder-based: class subfolders (ACK, BCC, MEL, NEV, SCC, SEK)
-    pad_labels = {"ACK": "ak", "BCC": "bcc", "MEL": "melanoma",
-                  "NEV": "nevus", "SCC": "scc", "SEK": "seborrheic_keratosis"}
+    # Find CSV
+    csv_path = find_file(base, "metadata.csv", "pad-ufes-20.csv",
+                         "PAD-UFES-20.csv", "labels.csv")
+    if csv_path is not None:
+        try:
+            df = pd.read_csv(csv_path)
 
-    # Search recursively for class folders
-    for folder in base.rglob("*"):
-        if folder.is_dir() and folder.name in pad_labels:
-            disease = pad_labels[folder.name]
-            for img_path in folder.iterdir():
-                if is_image(img_path):
-                    samples.append((img_path.resolve(), disease))
+            # Identify label and image columns
+            label_col = next((c for c in ["diagnostic", "label", "dx", "class"]
+                              if c in df.columns), None)
+            img_col = next((c for c in ["img_id", "image_id", "image", "filename"]
+                            if c in df.columns), None)
 
-    # If no folder structure, try CSV-based
-    if not samples:
-        csv_path = find_file(base, "metadata.csv", "pad-ufes-20.csv",
-                             "PAD-UFES-20.csv", "labels.csv")
-        if csv_path is not None:
-            try:
-                df = pd.read_csv(csv_path)
-                label_col = None
-                for col in ["diagnostic", "label", "dx", "class"]:
-                    if col in df.columns:
-                        label_col = col
-                        break
-                img_col = None
-                for col in ["img_id", "image_id", "image", "filename"]:
-                    if col in df.columns:
-                        img_col = col
-                        break
+            if label_col and img_col:
+                # Collect all image directories (imgs_part_1, imgs_part_2, imgs_part_3, ...)
+                img_dirs = [base / "imgs", base / "images"]
+                for d in base.iterdir():
+                    if d.is_dir() and (d.name.startswith("imgs") or d.name.startswith("image")):
+                        img_dirs.append(d)
 
-                if label_col and img_col:
-                    for _, row in df.iterrows():
-                        raw = str(row[label_col]).strip()
+                # Build image name → path lookup for fast access
+                img_lookup: dict[str, Path] = {}
+                for img_dir in img_dirs:
+                    if img_dir.is_dir():
+                        for p in img_dir.iterdir():
+                            if is_image(p):
+                                img_lookup[p.name] = p
+                                img_lookup[p.stem] = p  # also index by stem
+
+                for _, row in df.iterrows():
+                    raw = str(row[label_col]).strip()
+                    disease = pad_labels.get(raw)
+                    if disease is None:
                         disease = DISEASE_MAP.get(raw, raw.lower())
-                        img_name = str(row[img_col])
-                        for img_dir in [base / "imgs", base / "images", base]:
-                            for ext in [".png", ".jpg", ".jpeg"]:
-                                p = img_dir / f"{img_name}{ext}"
-                                if p.exists():
-                                    samples.append((p.resolve(), disease))
-                                    break
-            except Exception as e:
-                print(f"    [WARN] PAD-UFES CSV error: {e}")
+                    img_name = str(row[img_col]).strip()
+
+                    # Try exact name, then stem, then with extensions
+                    img_path = img_lookup.get(img_name) or img_lookup.get(
+                        Path(img_name).stem
+                    )
+                    if img_path and img_path.exists():
+                        samples.append((img_path.resolve(), disease))
+            else:
+                print(f"    [WARN] PAD-UFES: could not find label/image columns. "
+                      f"Columns: {list(df.columns)}")
+        except Exception as e:
+            print(f"    [WARN] PAD-UFES CSV error: {e}")
+
+    # Fallback: class subfolders (ACK/, BCC/, etc.)
+    if not samples:
+        for folder in base.rglob("*"):
+            if folder.is_dir() and folder.name in pad_labels:
+                disease = pad_labels[folder.name]
+                for img_path in folder.iterdir():
+                    if is_image(img_path):
+                        samples.append((img_path.resolve(), disease))
 
     print(f"    PAD-UFES-20: {len(samples)} images")
     return samples
