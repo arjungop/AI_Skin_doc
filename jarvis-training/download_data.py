@@ -64,7 +64,7 @@ DATASETS = {
         "priority": 5,
     },
     "massive_balanced": {
-        "slug": "kylegraupe/skin-disease-balanced-dataset",
+        "slug": "muhammadabdulsami/massive-skin-disease-balanced-dataset",
         "description": "Massive Balanced Dataset (~262k images, 34 classes)",
         "size_hint": "~50 GB",
         "priority": 6,
