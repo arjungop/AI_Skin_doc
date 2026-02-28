@@ -534,7 +534,7 @@ def preflight_checks(cfg: TrainConfig, logger: logging.Logger):
 
     # VRAM estimate
     if torch.cuda.is_available():
-        vram = torch.cuda.get_device_properties(0).total_mem / 1e9
+        vram = torch.cuda.get_device_properties(0).total_memory / 1e9
         if cfg.batch_size > 48 and vram < 45:
             logger.warning(
                 f"Batch size {cfg.batch_size} may OOM with {vram:.0f}GB VRAM. "
