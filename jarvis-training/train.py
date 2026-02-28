@@ -173,7 +173,7 @@ def get_device(logger: logging.Logger) -> torch.device:
 
     device = torch.device("cuda")
     gpu_name = torch.cuda.get_device_name(0)
-    vram_gb = torch.cuda.get_device_properties(0).total_mem / 1e9
+    vram_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
     logger.info(f"GPU : {gpu_name}  |  VRAM : {vram_gb:.1f} GB")
 
     # A6000/Ampere optimisations
