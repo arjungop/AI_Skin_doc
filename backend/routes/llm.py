@@ -96,7 +96,11 @@ def status(user: models.User = Depends(get_current_user)):
     prov = _provider() or "fallback"
     details = {"provider": prov}
     missing: list[str] = []
-    if prov == "gemini":
+    if prov == "openrouter":
+        if not os.getenv("OPENROUTER_API_KEY"):
+            missing.append("OPENROUTER_API_KEY")
+        details["model"] = os.getenv("OPENROUTER_MODEL", "stepfun/step-3.5-flash:free")
+    elif prov == "gemini":
         if not os.getenv("GEMINI_API_KEY"):
             missing.append("GEMINI_API_KEY")
         if not os.getenv("GEMINI_MODEL"):
