@@ -220,7 +220,7 @@ def download_padufes(data_dir: Path) -> Path:
         sys.exit(1)
 
     log.info("Downloading PAD-UFES-20 from Kaggle (mahdavi1202/skin-cancer) ...")
-    log.info("This is ~3.6GB (3 image parts), may take several minutes.")
+    log.info("This may take several minutes.")
     result = subprocess.run(
         ["kaggle", "datasets", "download",
          "-d", "mahdavi1202/skin-cancer",
@@ -370,11 +370,9 @@ def build_samples(data_dir: Path, class_to_idx: dict[str, int]) -> list[tuple[st
     padufes_dir = data_dir / "pad_ufes_20"
     meta_path = padufes_dir / "metadata.csv"
     if meta_path.exists():
-        # Images may be in imgs_part_1/, imgs_part_2/, imgs_part_3/ or images/ or root
+        # Images live in a 'padufes/' subfolder (or fallback locations)
         img_search_dirs = [
-            padufes_dir / "imgs_part_1",
-            padufes_dir / "imgs_part_2",
-            padufes_dir / "imgs_part_3",
+            padufes_dir / "padufes",
             padufes_dir / "images",
             padufes_dir,
         ]
