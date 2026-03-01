@@ -53,7 +53,7 @@ engine = create_engine(
     future=True,
     pool_pre_ping=True,
     connect_args=connect_args,
-    pool_recycle=280 if is_mysql else None,
+    pool_recycle=280 if is_mysql else -1,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
