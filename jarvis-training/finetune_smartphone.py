@@ -191,7 +191,8 @@ def download_with_progress(url: str, dest: Path, desc: str = ""):
 def download_padufes(data_dir: Path) -> Path:
     """
     Download PAD-UFES-20 from Zenodo.
-    DOI: 10.5281/zenodo.3247319
+    DOI: 10.5281/zenodo.3977616
+    Images come in 3 zip parts + metadata.csv
     Returns path to extracted directory.
     """
     out_dir = data_dir / "pad_ufes_20"
@@ -200,24 +201,25 @@ def download_padufes(data_dir: Path) -> Path:
         return out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Zenodo direct download URL for the dataset zip
+    # Correct Zenodo record: 3977616 (new /records/ URL format)
+    base = "https://zenodo.org/records/3977616/files"
     urls = [
-        # Images part 1-3 + metadata
-        ("https://zenodo.org/record/3247319/files/images.zip",
-         out_dir / "images.zip", "PAD-UFES-20 images"),
-        ("https://zenodo.org/record/3247319/files/metadata.csv",
-         out_dir / "metadata.csv", "PAD-UFES-20 metadata"),
+        (f"{base}/imgs_part_1.zip?download=1", out_dir / "imgs_part_1.zip", "PAD-UFES-20 images part 1/3"),
+        (f"{base}/imgs_part_2.zip?download=1", out_dir / "imgs_part_2.zip", "PAD-UFES-20 images part 2/3"),
+        (f"{base}/imgs_part_3.zip?download=1", out_dir / "imgs_part_3.zip", "PAD-UFES-20 images part 3/3"),
+        (f"{base}/metadata.csv?download=1",     out_dir / "metadata.csv",   "PAD-UFES-20 metadata"),
     ]
     for url, dest, desc in urls:
         download_with_progress(url, dest, desc)
 
-    # Unzip images
-    zip_path = out_dir / "images.zip"
-    if zip_path.exists():
-        log.info("  Extracting PAD-UFES-20 images...")
-        with zipfile.ZipFile(zip_path) as zf:
-            zf.extractall(out_dir)
-        zip_path.unlink()
+    # Unzip all parts
+    for part in ["imgs_part_1.zip", "imgs_part_2.zip", "imgs_part_3.zip"]:
+        zip_path = out_dir / part
+        if zip_path.exists():
+            log.info("  Extracting %s ...", part)
+            with zipfile.ZipFile(zip_path) as zf:
+                zf.extractall(out_dir)
+            zip_path.unlink()
 
     return out_dir
 
