@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+env/
+
+# Data / weights (auto-downloaded at runtime)
+backend/ml/weights/*.pth
+data/
+datasets/
+
+# Jupyter / notebooks
+*.ipynb
+.ipynb_checkpoints/
+
+# Node
+frontend-react/node_modules/
+frontend-react/dist/
+frontend-react/.env
+
+# Git
+.git/
+.gitignore
+
+# Secrets
+.env
+*.env.local
+
+# macOS
+.DS_Store
+
+# Training artifacts (not needed in prod)
+jarvis-training/
+scripts/
+padufes/
+checkpoints/
+finetune_data/

@@ -1,0 +1,74 @@
+# docker-compose.yml — Full stack: backend + frontend
+#
+# Quick start (local):
+#   cp .env.example .env          # fill in your secrets
+#   docker compose up --build
+#   Open http://localhost:3000
+#
+# Production (any VPS / Railway / Render):
+#   Set BACKEND_URL to your public backend URL in the frontend build arg.
+#   Add all secrets from .env.example as environment variables.
+#
+# Model weights (~351 MB) are auto-downloaded from HuggingFace on first boot.
+# No manual weight files needed.
+
+services:
+  backend:
+    build:
+      context: .                    # project root
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # ── Database ─────────────────────────────────────────────────────────
+      # Default: SQLite (zero config). Override with DATABASE_URL for Postgres/MySQL.
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////data/skindoc.db}
+
+      # ── Model weights ─────────────────────────────────────────────────────
+      # Auto-downloaded from HF on first boot if not present.
+      LESION_MODEL_WEIGHTS: /app/backend/ml/weights/best_model.pth
+      LESION_IMG_SIZE: 384
+
+      # ── CORS ─────────────────────────────────────────────────────────────
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://localhost:3000,http://localhost:80}
+
+      # ── Azure / LLM (optional) ────────────────────────────────────────────
+      AZURE_OPENAI_ENDPOINT:        ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_API_KEY:         ${AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_DEPLOYMENT:      ${AZURE_OPENAI_DEPLOYMENT:-}
+      AZURE_OPENAI_API_VERSION:     ${AZURE_OPENAI_API_VERSION:-2024-05-01-preview}
+      AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING:-}
+      AZURE_BLOB_CONTAINER:         ${AZURE_BLOB_CONTAINER:-lesion-images}
+
+      # ── Security ──────────────────────────────────────────────────────────
+      SECRET_KEY:                   ${SECRET_KEY:-change-me-in-production}
+    volumes:
+      # Persist model weights and SQLite DB across restarts
+      - model_weights:/app/backend/ml/weights
+      - sqlite_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s   # allow time for model download on first boot
+
+  frontend:
+    build:
+      context: ./frontend-react
+      dockerfile: Dockerfile
+      args:
+        # In production change to your public backend URL:
+        # VITE_API_BASE_URL: https://api.yourdomain.com
+        VITE_API_BASE_URL: ${BACKEND_URL:-http://localhost:8000}
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  model_weights:
+  sqlite_data:
