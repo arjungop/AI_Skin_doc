@@ -69,12 +69,49 @@
     @apply text-text-secondary hover:bg-slate-100/50 hover:text-text-primary;
   }
 
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs rounded-lg;
+  }
+
+  .btn-lg {
+    @apply px-8 py-4 text-lg rounded-2xl;
+  }
+
   /* ---- INPUT SYSTEM ---- */
   .input {
     @apply w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-text-primary placeholder:text-text-muted focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all;
   }
 
+  select.input, select.select {
+    @apply appearance-none;
+  }
+
+  /* ---- TABLE SYSTEM ---- */
+  .table-auto {
+    @apply w-full text-sm;
+  }
+
+  .table-auto th {
+    @apply px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-100 bg-slate-50;
+  }
+
+  .table-auto td {
+    @apply px-4 py-3 text-slate-700 border-b border-slate-100;
+  }
+
+  .table-auto tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  .table-auto tbody tr:hover td {
+    @apply bg-slate-50/60;
+  }
+
   /* ---- UTILITIES ---- */
+  .muted {
+    @apply text-slate-400 text-sm;
+  }
+
   .text-gradient {
     @apply bg-clip-text text-transparent bg-gradient-to-r from-primary-600 to-primary-500;
   }
