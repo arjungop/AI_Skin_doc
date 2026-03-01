@@ -20,8 +20,9 @@ function useDoctorId(){
 export default function DoctorAvailability(){
   const doctorId = useDoctorId()
   const [slots, setSlots] = useState<Slot[]>([])
-  const [tz, setTz] = useState<string>(Intl.DateTimeFormat().resolvedOptions().timeZone || 'local')
+  const [tz, setTz] = useState<string>(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC')
   const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
 
   async function load(){
     if(!doctorId) return
@@ -32,61 +33,114 @@ export default function DoctorAvailability(){
   }
   useEffect(()=>{ load() },[doctorId])
 
-  function addSlot(day:number){ setSlots(s=>[...s, { weekday:day, start_time:'09:00', end_time:'17:00', timezone: tz }]) }
-  function removeSlot(i:number){ setSlots(s=> s.filter((_,idx)=> idx!==i)) }
+  function addSlot(day:number){
+    setSlots(s=>[...s, { weekday:day, start_time:'09:00', end_time:'17:00', timezone: tz }])
+  }
+
+  function removeSlot(globalIdx:number){
+    setSlots(s=> s.filter((_,i)=> i!==globalIdx))
+  }
+
+  function updateSlot(globalIdx:number, field: 'start_time'|'end_time', value:string){
+    setSlots(s=> s.map((p,i)=> i===globalIdx ? { ...p, [field]: value } : p))
+  }
 
   async function save(){
     if(!doctorId) return
     setSaving(true)
     try{
       await api.setDoctorAvailability(doctorId, slots.map(s=>({ ...s, timezone: tz })))
+      setSaved(true)
+      setTimeout(()=>setSaved(false), 2000)
     }finally{ setSaving(false) }
   }
 
+  // Build a map from weekday → { slot, globalIndex }[]
   const grouped = useMemo(()=>{
-    const m: Record<number, Slot[]> = {}
-    for(const s of slots){ (m[s.weekday] ||= []).push(s) }
+    const m: Record<number, { slot:Slot; idx:number }[]> = {}
+    slots.forEach((s,i)=>{ (m[s.weekday] ||= []).push({ slot:s, idx:i }) })
     return m
   },[slots])
+
+  const TIMEZONES = [
+    'UTC',
+    'America/New_York',
+    'America/Chicago',
+    'America/Denver',
+    'America/Los_Angeles',
+    'Europe/London',
+    'Europe/Paris',
+    'Asia/Kolkata',
+    'Asia/Tokyo',
+    'Australia/Sydney',
+  ]
 
   return (
     <div className="space-y-6">
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Availability</h1>
-          <p className="muted">Weekly recurring slots with timezone awareness.</p>
+          <p className="text-sm text-slate-500">Weekly recurring slots with timezone awareness.</p>
         </div>
         <div className="flex items-center gap-2">
-          <select className="px-3 py-2 rounded-md border border-borderElegant" value={tz} onChange={e=>setTz(e.target.value)}>
-            <option value={tz}>{tz}</option>
-            <option value="local">local</option>
+          <select
+            className="input"
+            value={tz}
+            onChange={e=>setTz(e.target.value)}
+          >
+            {TIMEZONES.includes(tz) ? null : <option value={tz}>{tz}</option>}
+            {TIMEZONES.map(t=> <option key={t} value={t}>{t}</option>)}
           </select>
-          <button className="btn-primary" onClick={save} disabled={saving}>{saving?'Saving…':'Save'}</button>
+          <button
+            className="btn btn-primary"
+            onClick={save}
+            disabled={saving}
+          >
+            {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}
+          </button>
         </div>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {WEEKDAYS.map((d,di)=> (
-          <div key={di} className="card">
-            <div className="flex items-center justify-between mb-3">
-              <div className="font-medium">{d}</div>
-              <button className="btn-ghost btn-sm" onClick={()=>addSlot(di)}>Add slot</button>
-            </div>
-            <div className="space-y-2">
-              {(grouped[di]||[]).map((s,idx)=> (
-                <div key={idx} className="flex items-center gap-2">
-                  <input className="w-28" type="time" value={s.start_time} onChange={e=> setSlots(prev=> prev.map((p,i)=> i===slots.indexOf(s)? { ...p, start_time:e.target.value }:p))} />
-                  <span className="text-textLuxuryMuted">to</span>
-                  <input className="w-28" type="time" value={s.end_time} onChange={e=> setSlots(prev=> prev.map((p,i)=> i===slots.indexOf(s)? { ...p, end_time:e.target.value }:p))} />
-                  <button className="btn-ghost btn-sm" onClick={()=> removeSlot(slots.indexOf(s))}>Remove</button>
+        {WEEKDAYS.map((d,di)=> {
+          const daySlots = grouped[di] || []
+          return (
+            <div key={di} className="card">
+              <div className="flex items-center justify-between mb-3">
+                <div className="font-medium">
+                  {d}
+                  {daySlots.length > 0 && (
+                    <span className="ml-2 text-xs text-slate-400">{daySlots.length} slot{daySlots.length!==1?'s':''}</span>
+                  )}
                 </div>
-              ))}
-              {!(grouped[di]||[]).length && (
-                <div className="muted">No slots</div>
-              )}
+                <button className="btn btn-ghost btn-sm" onClick={()=>addSlot(di)}>+ Add slot</button>
+              </div>
+              <div className="space-y-2">
+                {daySlots.map(({ slot:s, idx })=> (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input
+                      className="input w-28"
+                      type="time"
+                      value={s.start_time}
+                      onChange={e=> updateSlot(idx, 'start_time', e.target.value)}
+                    />
+                    <span className="text-slate-400 text-sm">to</span>
+                    <input
+                      className="input w-28"
+                      type="time"
+                      value={s.end_time}
+                      onChange={e=> updateSlot(idx, 'end_time', e.target.value)}
+                    />
+                    <button className="btn btn-ghost btn-sm" onClick={()=> removeSlot(idx)}>✕</button>
+                  </div>
+                ))}
+                {daySlots.length===0 && (
+                  <div className="text-sm text-slate-400">No slots — click + Add slot</div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

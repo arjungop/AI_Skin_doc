@@ -13,11 +13,11 @@ type Appt = {
 
 function StatusBadge({ status }: { status: Appt['status'] }){
   const cls =
-    status === 'Confirmed' ? 'bg-successLux text-white' :
-    status === 'Completed' ? 'bg-primaryBlue text-white' :
-    status === 'Cancelled' ? 'bg-errorLux text-white' :
-    'bg-warmGray text-textLuxury'
-  return <span className={`px-2 py-1 rounded-full text-xs ${cls}`}>{status}</span>
+    status === 'Confirmed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+    status === 'Completed' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+    status === 'Cancelled' ? 'bg-red-50 text-red-600 border border-red-200' :
+    'bg-slate-100 text-slate-600 border border-slate-200'
+  return <span className={`px-2 py-1 rounded-full text-xs font-medium ${cls}`}>{status}</span>
 }
 
 function useDoctorId(){
@@ -86,18 +86,28 @@ export default function DoctorAppointments(){
       <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Appointments</h1>
-          <p className="muted">Manage daily schedule and actions.</p>
+          <p className="text-sm text-slate-500">Manage daily schedule and actions.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-1 p-1 bg-slate-100 rounded-xl">
           {(['day','week','month','table'] as const).map(v=> (
-            <button key={v} onClick={()=>setView(v)} className={`px-3 py-2 rounded-md border ${view===v?'bg-primaryBlue text-white border-primaryBlue':'border-borderElegant hover:bg-slate-50'}`}>{v.toUpperCase()}</button>
+            <button
+              key={v}
+              onClick={()=>setView(v)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                view===v
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {v.charAt(0).toUpperCase() + v.slice(1)}
+            </button>
           ))}
         </div>
       </header>
 
       {view==='table' && (
-        <div className="card">
-          <table>
+        <div className="card overflow-x-auto">
+          <table className="table-auto">
             <thead>
               <tr>
                 <th>ID</th>
@@ -120,15 +130,15 @@ export default function DoctorAppointments(){
                     <td><StatusBadge status={a.status} /></td>
                     <td className="space-x-2">
                       {a.status==='Scheduled' && (
-                        <button className="btn-primary btn-sm" onClick={()=>setConfirm({ id:a.appointment_id, action:'Confirm' })}>Confirm</button>
+                        <button className="btn btn-primary btn-sm" onClick={()=>setConfirm({ id:a.appointment_id, action:'Confirm' })}>Confirm</button>
                       )}
                       {['Scheduled','Confirmed'].includes(a.status) && (
-                        <button className="btn-ghost btn-sm" onClick={()=>setConfirm({ id:a.appointment_id, action:'Cancel' })}>Cancel</button>
+                        <button className="btn btn-ghost btn-sm" onClick={()=>setConfirm({ id:a.appointment_id, action:'Cancel' })}>Cancel</button>
                       )}
                       {['Scheduled','Confirmed'].includes(a.status) && (
-                        <button className="btn-ghost btn-sm" onClick={()=>setConfirm({ id:a.appointment_id, action:'Complete' })}>Complete</button>
+                        <button className="btn btn-ghost btn-sm" onClick={()=>setConfirm({ id:a.appointment_id, action:'Complete' })}>Complete</button>
                       )}
-                      <button className="btn-ghost btn-sm" onClick={()=>{ setNoteFor(a); setNoteText('') }}>Add Notes</button>
+                      <button className="btn btn-ghost btn-sm" onClick={()=>{ setNoteFor(a); setNoteText('') }}>Add Notes</button>
                     </td>
                   </tr>
                 )
@@ -151,8 +161,8 @@ export default function DoctorAppointments(){
               )
               if(!show) return null
               return (
-                <div key={day} className="p-3 rounded-xl border border-borderElegant bg-white">
-                  <div className="font-medium text-textLuxury mb-2">{dt.toDateString()}</div>
+                <div key={day} className="p-3 rounded-xl border border-slate-200 bg-white">
+                  <div className="font-medium text-slate-800 mb-2">{dt.toDateString()}</div>
                   <div className="space-y-2">
                     {list.sort((a,b)=> a.appointment_date.localeCompare(b.appointment_date)).map(a=>{
                       const d = new Date(a.appointment_date)
@@ -163,9 +173,9 @@ export default function DoctorAppointments(){
                             <div className="text-sm">{d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · PID {a.patient_id} · {a.reason||'Consultation'}</div>
                           </div>
                           <div className="flex gap-2">
-                            {a.status==='Scheduled' && <button className="btn-primary btn-sm" onClick={()=>setConfirm({ id:a.appointment_id, action:'Confirm' })}>Confirm</button>}
-                            {['Scheduled','Confirmed'].includes(a.status) && <button className="btn-ghost btn-sm" onClick={()=>setConfirm({ id:a.appointment_id, action:'Cancel' })}>Cancel</button>}
-                            {['Scheduled','Confirmed'].includes(a.status) && <button className="btn-ghost btn-sm" onClick={()=>setConfirm({ id:a.appointment_id, action:'Complete' })}>Complete</button>}
+                            {a.status==='Scheduled' && <button className="btn btn-primary btn-sm" onClick={()=>setConfirm({ id:a.appointment_id, action:'Confirm' })}>Confirm</button>}
+                            {['Scheduled','Confirmed'].includes(a.status) && <button className="btn btn-ghost btn-sm" onClick={()=>setConfirm({ id:a.appointment_id, action:'Cancel' })}>Cancel</button>}
+                            {['Scheduled','Confirmed'].includes(a.status) && <button className="btn btn-ghost btn-sm" onClick={()=>setConfirm({ id:a.appointment_id, action:'Complete' })}>Complete</button>}
                           </div>
                         </div>
                       )
@@ -186,7 +196,7 @@ export default function DoctorAppointments(){
       >
         <div className="space-y-2">
           <div>This will update the appointment status. This action is logged.</div>
-          <div className="muted">Appointments after today will be cancelled automatically. This action is logged.</div>
+          <div className="text-sm text-slate-500">Appointments after today will be cancelled automatically. This action is logged.</div>
         </div>
       </ConfirmModal>
 
@@ -197,7 +207,7 @@ export default function DoctorAppointments(){
         onClose={()=>{ setNoteFor(null); setNoteText('') }}
         onConfirm={()=> noteFor && addNote(noteFor)}
       >
-        <textarea className="w-full" rows={4} placeholder="Notes visible to patient via chat" value={noteText} onChange={e=>setNoteText(e.target.value)} />
+        <textarea className="input w-full" rows={4} placeholder="Notes visible to patient via chat" value={noteText} onChange={e=>setNoteText(e.target.value)} />
       </ConfirmModal>
     </div>
   )
