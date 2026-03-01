@@ -273,12 +273,15 @@ def build_samples(
         reader = csv.DictReader(f)
         isic_cols = [c for c in reader.fieldnames if c != "image"]
         for row in reader:
-            # Find the '1' column (one-hot)
+            # Find the '1' column (one-hot) — values can be "1", "1.0", etc.
             our_cls = None
             for col in isic_cols:
-                if row.get(col, "0").strip() == "1":
-                    our_cls = ISIC2019_MAP.get(col)
-                    break
+                try:
+                    if float(row.get(col, "0")) == 1.0:
+                        our_cls = ISIC2019_MAP.get(col)
+                        break
+                except (ValueError, TypeError):
+                    pass
             if our_cls is None or our_cls not in TARGET_CLASSES:
                 skipped += 1
                 continue
