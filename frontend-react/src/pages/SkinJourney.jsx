@@ -141,7 +141,7 @@ export default function SkinJourney() {
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
                             onClick={() => setShowModal(true)}
-                            className="btn-primary flex items-center gap-2 shadow-lg shadow-primary-500/20"
+                            className="btn btn-primary flex items-center gap-2 shadow-lg shadow-primary-500/20"
                         >
                             <LuPlus size={18} /> New Entry
                         </motion.button>
@@ -321,7 +321,7 @@ export default function SkinJourney() {
                                         whileTap={{ scale: 0.99 }}
                                         type="submit"
                                         disabled={submitting}
-                                        className="w-full btn-primary py-3.5 font-bold shadow-lg shadow-primary-500/20 disabled:opacity-70 disabled:cursor-not-allowed"
+                                        className="w-full btn btn-primary py-3.5 font-bold shadow-lg shadow-primary-500/20 disabled:opacity-70 disabled:cursor-not-allowed"
                                     >
                                         {submitting ? 'Saving...' : 'Save Entry'}
                                     </motion.button>
