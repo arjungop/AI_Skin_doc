@@ -266,7 +266,7 @@ def download_fitzpatrick(data_dir: Path) -> Path:
     try:
         from datasets import load_dataset  # type: ignore
         log.info("Downloading Fitzpatrick17k via HuggingFace datasets...")
-        ds = load_dataset("nateraw/fitzpatrick17k", split="train", trust_remote_code=True)
+        ds = load_dataset("nateraw/fitzpatrick17k", split="train")
 
         images_dir = out_dir / "images"
         images_dir.mkdir(exist_ok=True)
@@ -329,8 +329,14 @@ def load_checkpoint_from_hf(cfg: FinetuneConfig, device: torch.device) -> Path:
         log.info("Downloaded to: %s", local)
         return Path(local)
     except Exception as e:
-        log.error("Failed to download checkpoint: %s", e)
-        log.error("Set --checkpoint manually or place best_model.pth in checkpoints/")
+        log.error("="*60)
+        log.error("Cannot download checkpoint from HuggingFace: %s", e)
+        log.error("")
+        log.error("The HuggingFace repo is private. Copy best_model.pth to Jarvis:")
+        log.error("  On your LOCAL machine run:")
+        log.error("    scp backend/ml/weights/best_model.pth root@<JARVIS_IP>:/root/AI_Skin_doc/jarvis-training/checkpoints/best_model.pth")
+        log.error("  Then re-run: bash run_finetune.sh")
+        log.error("="*60)
         sys.exit(1)
 
 
