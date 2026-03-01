@@ -192,7 +192,8 @@ def download_padufes(data_dir: Path) -> Path:
     """
     Download PAD-UFES-20 from Kaggle using the kaggle CLI.
     Requires: pip install kaggle  +  ~/.kaggle/kaggle.json credentials.
-    Dataset: https://www.kaggle.com/datasets/andrewmvd/pad-ufes-20
+    Dataset: https://www.kaggle.com/datasets/mahdavi1202/skin-cancer
+    Images are split across imgs_part_1/, imgs_part_2/, imgs_part_3/.
     """
     import subprocess
     out_dir = data_dir / "pad_ufes_20"
@@ -218,26 +219,28 @@ def download_padufes(data_dir: Path) -> Path:
         log.error("="*60)
         sys.exit(1)
 
-    log.info("Downloading PAD-UFES-20 from Kaggle (andrewmvd/pad-ufes-20) ...")
-    log.info("This is ~1GB, may take a few minutes.")
+    log.info("Downloading PAD-UFES-20 from Kaggle (mahdavi1202/skin-cancer) ...")
+    log.info("This is ~3.6GB (3 image parts), may take several minutes.")
     result = subprocess.run(
         ["kaggle", "datasets", "download",
-         "-d", "andrewmvd/pad-ufes-20",
+         "-d", "mahdavi1202/skin-cancer",
          "--unzip",
          "-p", str(out_dir)],
         capture_output=False,
     )
     if result.returncode != 0:
         log.error("kaggle download failed (exit code %d)", result.returncode)
-        log.error("Try running manually: kaggle datasets download -d andrewmvd/pad-ufes-20 --unzip -p %s", out_dir)
+        log.error("Try running manually: kaggle datasets download -d mahdavi1202/skin-cancer --unzip -p %s", out_dir)
         sys.exit(1)
 
-    # Flatten if Kaggle nested into a subfolder
-    for sub in out_dir.iterdir():
+    # Flatten if Kaggle nested into a subfolder (e.g. out_dir/skin-cancer/...)
+    for sub in sorted(out_dir.iterdir()):
         if sub.is_dir() and (sub / "metadata.csv").exists():
             log.info("Flattening subfolder %s -> %s", sub, out_dir)
             for f in sub.iterdir():
-                f.rename(out_dir / f.name)
+                dest = out_dir / f.name
+                if not dest.exists():
+                    f.rename(dest)
             sub.rmdir()
             break
 
@@ -367,6 +370,22 @@ def build_samples(data_dir: Path, class_to_idx: dict[str, int]) -> list[tuple[st
     padufes_dir = data_dir / "pad_ufes_20"
     meta_path = padufes_dir / "metadata.csv"
     if meta_path.exists():
+        # Images may be in imgs_part_1/, imgs_part_2/, imgs_part_3/ or images/ or root
+        img_search_dirs = [
+            padufes_dir / "imgs_part_1",
+            padufes_dir / "imgs_part_2",
+            padufes_dir / "imgs_part_3",
+            padufes_dir / "images",
+            padufes_dir,
+        ]
+        # Build a filename→path index for fast lookup
+        img_index: dict[str, Path] = {}
+        for search_dir in img_search_dirs:
+            if search_dir.is_dir():
+                for p in search_dir.iterdir():
+                    if p.suffix.lower() in (".png", ".jpg", ".jpeg"):
+                        img_index[p.name] = p
+
         with open(meta_path) as f:
             reader = csv.DictReader(f)
             for row in reader:
@@ -375,12 +394,9 @@ def build_samples(data_dir: Path, class_to_idx: dict[str, int]) -> list[tuple[st
                 if not our_class or our_class not in class_to_idx:
                     skipped += 1
                     continue
-                # Images stored as {img_id}.png in padufes_dir/images/ or padufes_dir/
                 img_id = row.get("img_id", "")
-                img_path = padufes_dir / "images" / img_id
-                if not img_path.exists():
-                    img_path = padufes_dir / img_id
-                if not img_path.exists():
+                img_path = img_index.get(img_id)
+                if img_path is None:
                     skipped += 1
                     continue
                 samples.append((str(img_path), class_to_idx[our_class]))
