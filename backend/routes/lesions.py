@@ -255,8 +255,18 @@ async def predict_lesion(
     db.commit()
     db.refresh(new_lesion)
     # Attach transient fields for the response schema (not stored in DB)
-    new_lesion.risk_score = float(risk)
+    new_lesion.risk_score  = float(risk)
     new_lesion.explain_url = explain_url if use_model else None
+    if use_model:
+        new_lesion.confidence       = float(pred.get("probability", 0.0))
+        new_lesion.label            = pred.get("label")
+        new_lesion.is_low_confidence = bool(pred.get("is_low_confidence", False))
+        new_lesion.entropy          = pred.get("entropy")
+        _all = pred.get("all_probs", {})
+        new_lesion.top_probs = {
+            k: round(v, 4)
+            for k, v in sorted(_all.items(), key=lambda x: -x[1])[:6]
+        }
     return new_lesion
 
 

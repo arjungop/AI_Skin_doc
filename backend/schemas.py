@@ -72,6 +72,12 @@ class LesionOut(LesionCreate):
     created_at: datetime
     risk_score: float | None = None
     explain_url: str | None = None
+    # ML enrichment fields (transient — not stored in DB)
+    confidence: float | None = None
+    label: str | None = None          # actual disease name e.g. "melanoma"
+    is_low_confidence: bool | None = None
+    top_probs: dict | None = None     # top-5 {class: prob}
+    entropy: float | None = None
 
     model_config = {"from_attributes": True}
 

@@ -197,24 +197,101 @@ export default function LesionUpload() {
               </Card>
             ) : (
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+
+                {/* Low-confidence warning banner */}
+                {res.is_low_confidence && (
+                  <div className="flex items-start gap-3 p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/30">
+                    <LuTriangleAlert className="text-yellow-400 flex-shrink-0 mt-0.5" size={20} />
+                    <div>
+                      <p className="text-sm font-semibold text-yellow-300">Image quality too low for confident prediction</p>
+                      <p className="text-xs text-yellow-200/70 mt-1">The model is uncertain — please retake the photo as a clear, well-lit close-up of the skin lesion. Avoid blurry or full-body shots.</p>
+                    </div>
+                  </div>
+                )}
+
                 <Card variant="glow-ai">
                   <div className="flex items-start justify-between mb-6">
                     <div>
                       <CardTitle>Analysis Results</CardTitle>
-                      <CardDescription>AI Confidence: {(res.confidence * 100).toFixed(1)}%</CardDescription>
+                      <CardDescription>
+                        Confidence: <span className={res.is_low_confidence ? 'text-yellow-400' : 'text-green-400'}>
+                          {res.confidence != null ? (res.confidence * 100).toFixed(1) + '%' : '—'}
+                        </span>
+                        {res.entropy != null && (
+                          <span className="ml-2 text-text-muted text-xs">
+                            · Certainty {(100 - res.entropy * 100).toFixed(0)}%
+                          </span>
+                        )}
+                      </CardDescription>
                     </div>
-                    <CardBadge variant={res.prediction?.toLowerCase().includes('melanoma') ? 'danger' : 'success'}>
-                      {res.prediction}
+                    <CardBadge variant={
+                      res.prediction === 'malignant' ? 'danger' :
+                      res.is_low_confidence ? 'warning' : 'success'
+                    }>
+                      {res.label
+                        ? res.label.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+                        : res.prediction}
                     </CardBadge>
                   </div>
 
                   <div className="space-y-4">
-                    <CardData label="Lesion Severity" value={res.severity || 'Moderate'} />
-                    <CardData label="Risk Assessment" value={res.risk_level || 'Attention Recommended'} />
+                    <CardData
+                      label="Risk Assessment"
+                      value={
+                        res.prediction === 'malignant' ? 'Needs clinical review' :
+                        res.is_low_confidence ? 'Unclear — retake photo' :
+                        'Low risk — monitor regularly'
+                      }
+                    />
+                    {res.risk_score != null && (
+                      <div>
+                        <div className="flex justify-between text-xs text-text-muted mb-1">
+                          <span>Malignancy risk score</span>
+                          <span>{(res.risk_score * 100).toFixed(1)}%</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${res.risk_score > 0.5 ? 'bg-danger' : res.risk_score > 0.3 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                            style={{ width: `${Math.min(100, res.risk_score * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Top predictions breakdown */}
+                    {res.top_probs && Object.keys(res.top_probs).length > 0 && (
+                      <div className="pt-4 border-t border-white/10">
+                        <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-3">Top Predictions</h4>
+                        <div className="space-y-2">
+                          {Object.entries(res.top_probs).map(([cls, prob], i) => (
+                            <div key={cls}>
+                              <div className="flex justify-between text-xs mb-0.5">
+                                <span className={`${i === 0 ? 'text-text-primary font-medium' : 'text-text-muted'}`}>
+                                  {cls.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                                </span>
+                                <span className="text-text-muted">{(prob * 100).toFixed(1)}%</span>
+                              </div>
+                              <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${i === 0 ? 'bg-ai-500' : 'bg-white/30'}`}
+                                  style={{ width: `${Math.min(100, prob * 100)}%` }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="pt-4 border-t border-white/10">
                       <h4 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-2">AI Recommendation</h4>
-                      <p className="text-text-primary leading-relaxed">{res.recommendation || 'Consult a dermatologist for further evaluation.'}</p>
+                      <p className="text-text-primary leading-relaxed">
+                        {res.is_low_confidence
+                          ? 'Image quality is too low for a reliable result. Please retake with a clear, close-up photo in good lighting.'
+                          : res.prediction === 'malignant'
+                            ? 'This lesion shows features that warrant clinical attention. Please book a dermatologist review within 1–2 weeks.'
+                            : 'No immediate concern detected. Monitor the area monthly and consult a dermatologist if it changes.'}
+                      </p>
                     </div>
                   </div>
                 </Card>

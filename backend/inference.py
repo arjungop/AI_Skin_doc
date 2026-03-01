@@ -26,6 +26,7 @@ import logging
 import threading
 from pathlib import Path
 
+import math
 import torch
 import torch.nn.functional as F
 import torchvision.transforms as T
@@ -245,7 +246,8 @@ class SkinInference:
         """
         if self.model is None or not self.classes:
             return {"label": "unknown", "probability": 0.0,
-                    "p_malignant": 0.0, "all_probs": {}}
+                    "p_malignant": 0.0, "all_probs": {},
+                    "entropy": 1.0, "is_low_confidence": True}
 
         image = self._normalize_input(image)
         x = self.transform(image.convert("RGB")).unsqueeze(0).to(self.device)
@@ -265,11 +267,21 @@ class SkinInference:
         p_malignant = float(probs[self._cancer_indices].sum()) if self._cancer_indices else 0.0
         all_probs   = {cls: float(probs[i]) for i, cls in enumerate(self.classes)}
 
+        # Entropy-based uncertainty (normalised 0→1; > 0.85 = confused)
+        probs_list  = probs.tolist()
+        n_cls       = len(probs_list)
+        entropy_raw = -sum(p * math.log(p + 1e-12) for p in probs_list)
+        max_entropy = math.log(n_cls) if n_cls > 1 else 1.0
+        entropy_norm = entropy_raw / max_entropy  # 0 = certain, 1 = uniform
+        is_low_confidence = entropy_norm > 0.85 or probability < 0.20
+
         return {
-            "label":       label,
-            "probability": probability,
-            "p_malignant": p_malignant,
-            "all_probs":   all_probs,
+            "label":              label,
+            "probability":        probability,
+            "p_malignant":        p_malignant,
+            "all_probs":          all_probs,
+            "entropy":            round(entropy_norm, 4),
+            "is_low_confidence":  is_low_confidence,
         }
 
     def predict_path(self, img_path: str) -> dict:
