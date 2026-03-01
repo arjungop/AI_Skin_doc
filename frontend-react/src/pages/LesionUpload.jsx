@@ -499,8 +499,8 @@ export default function LesionUpload() {
                   </div>
                 </Card>
 
-                {/* Disease info panel */}
-                {res.label && DISEASE_INFO[res.label] && (() => {
+                {/* Disease info panel — only shown for high-confidence predictions */}
+                {res.label && DISEASE_INFO[res.label] && !res.is_low_confidence && (() => {
                   const d = DISEASE_INFO[res.label]
                   const borderCls = d.severity === 'danger'
                     ? 'border-red-200 bg-red-50/50'

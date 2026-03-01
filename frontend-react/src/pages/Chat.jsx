@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from '../services/api'
-import { LuSend, LuSparkles, LuUser, LuTrash2, LuMessageCircle, LuPlus, LuHistory, LuBot, LuX } from 'react-icons/lu'
+import { LuSend, LuSparkles, LuUser, LuTrash2, LuMessageCircle, LuPlus, LuHistory, LuBot, LuX, LuSquare } from 'react-icons/lu'
 import { Card, CardTitle, IconWrapper } from '../components/Card'
 
 export default function Chat() {
@@ -23,6 +23,7 @@ export default function Chat() {
 
   const chunkBuffer = useRef('')
   const updateTimeout = useRef(null)
+  const abortRef = useRef(null)
 
   const mountedRef = useRef(true)
 
@@ -37,6 +38,7 @@ export default function Chat() {
     return () => {
       mountedRef.current = false
       if (updateTimeout.current) { clearTimeout(updateTimeout.current); updateTimeout.current = null }
+      abortRef.current?.abort()
     }
   }, [])
 
@@ -67,6 +69,22 @@ export default function Chat() {
     }
   }, [])
 
+  function cancelStream() {
+    abortRef.current?.abort()
+    abortRef.current = null
+    setPending(false)
+    if (updateTimeout.current) { clearTimeout(updateTimeout.current); updateTimeout.current = null }
+    flushBuffer()
+    setMessages(prev => {
+      const copy = [...prev]
+      const last = copy[copy.length - 1]
+      if (last?.who === 'AI' && !last.text) {
+        copy[copy.length - 1] = { who: 'AI', text: '[Cancelled]' }
+      }
+      return copy
+    })
+  }
+
   async function send(e) {
     e.preventDefault()
     if (!input.trim() || pending) return
@@ -75,6 +93,9 @@ export default function Chat() {
     setMessages(prev => [...prev, userMessage])
     setInput('')
     setPending(true)
+
+    const controller = new AbortController()
+    abortRef.current = controller
 
     try {
       const history = messages.map(m => ({ role: m.who === 'You' ? 'user' : 'assistant', content: m.text }))
@@ -91,7 +112,7 @@ export default function Chat() {
               updateTimeout.current = null
             }, 50)
           }
-        })
+        }, controller.signal)
         if (updateTimeout.current) {
           clearTimeout(updateTimeout.current)
           updateTimeout.current = null
@@ -99,8 +120,13 @@ export default function Chat() {
         flushBuffer()
       }
     } catch (err) {
-      setMessages(prev => [...prev, { who: 'AI', text: '[Error] ' + (err.message || 'Request failed') }])
+      if (err?.name === 'AbortError') {
+        // Cancelled by user — message already updated by cancelStream()
+      } else {
+        setMessages(prev => [...prev, { who: 'AI', text: '[Error] ' + (err.message || 'Request failed') }])
+      }
     } finally {
+      abortRef.current = null
       setPending(false)
     }
   }
@@ -244,6 +270,17 @@ export default function Chat() {
 
           {/* Input */}
           <div className="p-4 bg-white border-t border-slate-100">
+            {pending && (
+              <div className="flex justify-center mb-2">
+                <button
+                  type="button"
+                  onClick={cancelStream}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-rose-600 bg-slate-100 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-lg transition-all"
+                >
+                  <LuSquare size={12} /> Stop generating
+                </button>
+              </div>
+            )}
             <form onSubmit={send} className="relative">
               <input
                 className="w-full pl-5 pr-14 py-4 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-500 transition-all text-slate-900 placeholder:text-slate-400"

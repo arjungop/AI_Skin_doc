@@ -5,9 +5,13 @@ Provides:
     POST /              – Admin creates a billing entry
     GET  /              – List own transactions (admin sees all)
     GET  /summary       – Aggregate totals by status
+    GET  /export.csv    – Download transactions as CSV
 """
 
+import csv
+import io
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from backend.database import get_db
@@ -110,3 +114,42 @@ def summary(
         "failed": by_status.get("failed", 0.0),
         "count": query.count(),
     }
+
+
+# ── CSV Export ────────────────────────────────────────────────────────────
+@router.get("/export.csv")
+def export_csv(
+    status: str | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    query = db.query(models.Transaction)
+    role = (user.role or "").upper()
+    if role != "ADMIN":
+        query = query.filter(models.Transaction.user_id == user.user_id)
+    if status:
+        query = query.filter(models.Transaction.status == status.lower())
+
+    rows = query.order_by(models.Transaction.created_at.desc()).limit(1000).all()
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["ID", "Amount", "Status", "Category", "Method", "Reference", "Note", "Created"])
+    for r in rows:
+        writer.writerow([
+            r.transaction_id,
+            r.amount,
+            r.status,
+            getattr(r, "category", ""),
+            getattr(r, "method", ""),
+            getattr(r, "reference", ""),
+            getattr(r, "note", ""),
+            r.created_at.isoformat() if r.created_at else "",
+        ])
+
+    buf.seek(0)
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=transactions.csv"},
+    )

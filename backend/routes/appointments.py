@@ -5,8 +5,50 @@ from backend import crud, schemas, models
 from backend.security import require_roles, get_current_user
 from pydantic import BaseModel
 from backend.notify import NotificationHub
+import os
+from datetime import datetime, timedelta
 
 router = APIRouter()
+
+
+@router.get("/booked-slots")
+def get_booked_slots(
+    doctor_id: int,
+    date: str,  # YYYY-MM-DD
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(get_current_user),
+):
+    """Return list of HH:MM strings for slots already booked on the given date."""
+    try:
+        day = datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+
+    day_start = day
+    day_end = day + timedelta(days=1)
+
+    appointments = (
+        db.query(models.Appointment)
+        .filter(
+            models.Appointment.doctor_id == doctor_id,
+            models.Appointment.status.in_(["Scheduled", "Confirmed"]),
+            models.Appointment.appointment_date >= day_start,
+            models.Appointment.appointment_date < day_end,
+        )
+        .all()
+    )
+
+    duration_min = int(os.getenv("APPOINTMENT_DURATION_MINUTES", "30"))
+    booked: list[str] = []
+    for appt in appointments:
+        t = appt.appointment_date
+        end = t + timedelta(minutes=duration_min)
+        cur = t
+        while cur < end:
+            booked.append(cur.strftime("%H:%M"))
+            cur += timedelta(minutes=30)
+
+    return booked
 
 # Accept both with and without trailing slash
 @router.post("/", response_model=schemas.AppointmentOut)
@@ -24,8 +66,6 @@ def create_appointment(
         if not patient or patient.patient_id != data.patient_id:
             raise HTTPException(status_code=403, detail="Cannot create for another patient")
     # Conflict checks
-    from datetime import timedelta
-    import os
     appt_dt = data.appointment_date
     weekday = appt_dt.weekday()
     avail = db.query(models.DoctorAvailability).filter(

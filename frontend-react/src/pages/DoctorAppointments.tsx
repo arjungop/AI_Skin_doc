@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import ConfirmModal from '../components/ConfirmModal.jsx'
 import { api } from '../services/api.js'
+import { useToast } from '../components/Toast.jsx'
 
 type Appt = {
   appointment_id: number
@@ -36,7 +37,9 @@ function useDoctorId(){
 
 export default function DoctorAppointments(){
   const { doctorId, loading } = useDoctorId()
+  const { push } = useToast()
   const [items, setItems] = useState<Appt[]>([])
+  const [patientNames, setPatientNames] = useState<Record<number,string>>({})
   const [view, setView] = useState<'day'|'week'|'month'|'table'>('table')
   const [confirm, setConfirm] = useState<{ id:number, action:'Confirm'|'Complete'|'Cancel' }|null>(null)
   const [noteFor, setNoteFor] = useState<Appt|null>(null)
@@ -47,8 +50,17 @@ export default function DoctorAppointments(){
   async function load(){
     try{
       setError(null)
-      const data: Appt[] = await api.listAppointments()
+      const [data, patients]: [Appt[], any[]] = await Promise.all([
+        api.listAppointments(),
+        api.listPatients('').catch(()=>[]),
+      ])
       setItems(data||[])
+      const nameMap: Record<number,string> = {}
+      for(const p of (patients||[])){
+        const name = [p.first_name, p.last_name].filter(Boolean).join(' ') || p.username || `PID ${p.patient_id}`
+        nameMap[p.patient_id] = name
+      }
+      setPatientNames(nameMap)
     }catch(err: any){ setError(err?.message || 'Failed to load appointments') }
   }
   useEffect(()=>{ if(!loading) load() },[loading])
@@ -65,7 +77,12 @@ export default function DoctorAppointments(){
   },[items])
 
   async function doAction(id:number, action:'Confirm'|'Complete'|'Cancel'){
-    await api.updateAppointmentStatus(id, action)
+    try{
+      await api.updateAppointmentStatus(id, action)
+      push(`Appointment ${action.toLowerCase()}ed`, 'success')
+    }catch(err: any){
+      push(err?.message || `Failed to ${action.toLowerCase()}`, 'error')
+    }
     setConfirm(null)
     await load()
   }
@@ -136,7 +153,7 @@ export default function DoctorAppointments(){
                   <tr key={a.appointment_id}>
                     <td>#{a.appointment_id}</td>
                     <td>{d.toLocaleString()}</td>
-                    <td>PID {a.patient_id}</td>
+                    <td>{patientNames[a.patient_id] || `PID ${a.patient_id}`}</td>
                     <td>{a.reason||'-'}</td>
                     <td><StatusBadge status={a.status} /></td>
                     <td className="space-x-2">
@@ -181,7 +198,7 @@ export default function DoctorAppointments(){
                         <div key={a.appointment_id} className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <StatusBadge status={a.status} />
-                            <div className="text-sm">{d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · PID {a.patient_id} · {a.reason||'Consultation'}</div>
+                            <div className="text-sm">{d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {patientNames[a.patient_id] || `PID ${a.patient_id}`} · {a.reason||'Consultation'}</div>
                           </div>
                           <div className="flex gap-2">
                             {a.status==='Scheduled' && <button className="btn btn-primary btn-sm" onClick={()=>setConfirm({ id:a.appointment_id, action:'Confirm' })}>Confirm</button>}

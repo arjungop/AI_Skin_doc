@@ -52,6 +52,7 @@ export const api = {
   listAppointments: () => request('/appointments/'),
   listDoctorAvailability: (doctorId) => request(`/doctors/${doctorId}/availability`),
   setDoctorAvailability: (doctorId, items) => request(`/doctors/${doctorId}/availability`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(items) }),
+  listBookedSlots: (doctorId, date) => request(`/appointments/booked-slots?doctor_id=${doctorId}&date=${date}`).catch(() => []),
   updateAppointmentStatus: (id, status) => request(`/appointments/${id}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }),
   // Doctors
   listDoctors: (q) => request(`/doctors${q ? `?q=${encodeURIComponent(q)}` : ''}`),
@@ -69,6 +70,16 @@ export const api = {
     return request(`/transactions${qs ? `?${qs}` : ''}`)
   },
   transactionsSummary: () => request('/transactions/summary'),
+  exportTransactionsCSV: async (status) => {
+    const q = new URLSearchParams()
+    if (status) q.set('status', status)
+    const res = await fetch(`${BASE_URL}/transactions/export.csv${q.toString() ? `?${q}` : ''}`, { headers: authHeaders() })
+    if (!res.ok) throw new Error(`Export failed: ${res.status}`)
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = 'transactions.csv'; a.click()
+    URL.revokeObjectURL(url)
+  },
   // Lesions
   predictLesion: async (patientId, file, opts = {}) => {
     const form = new FormData()
@@ -87,16 +98,28 @@ export const api = {
   // LLM
   chat: (payload) => request('/llm/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
   llmStatus: () => request('/llm/status'),
-  chatStream: async (payload, onChunk) => {
-    const res = await fetch(`${BASE_URL}/llm/chat_stream`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(payload) })
-    if (!res.ok) throw new Error('Stream error')
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder('utf-8')
-    while (true) {
-      const { value, done } = await reader.read()
-      if (done) break
-      const text = decoder.decode(value, { stream: true })
-      if (text) onChunk(text)
+  chatStream: async (payload, onChunk, signal) => {
+    const controller = signal ? null : new AbortController()
+    const abortSignal = signal || controller?.signal
+    const timeoutId = setTimeout(() => controller?.abort(), 60_000)
+    try {
+      const res = await fetch(`${BASE_URL}/llm/chat_stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify(payload),
+        signal: abortSignal,
+      })
+      if (!res.ok) throw new Error('Stream error')
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder('utf-8')
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        const text = decoder.decode(value, { stream: true })
+        if (text) onChunk(text)
+      }
+    } finally {
+      clearTimeout(timeoutId)
     }
   },
   // Admin

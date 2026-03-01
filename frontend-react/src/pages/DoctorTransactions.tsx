@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { api } from '../services/api.js'
+import { useToast } from '../components/Toast.jsx'
 
 type Txn = { transaction_id:number; amount:number; status:string; created_at:string; method?:string; reference?:string; note?:string }
 
@@ -19,6 +20,8 @@ export default function DoctorTransactions(){
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string|null>(null)
+  const [exporting, setExporting] = useState(false)
+  const { push } = useToast()
 
   async function load(){
     setLoading(true)
@@ -39,15 +42,14 @@ export default function DoctorTransactions(){
   ,[rows])
 
   async function exportCSV(){
-    const token = localStorage.getItem('access_token')
-    const headers: Record<string,string> = token
-      ? { 'Authorization': `Bearer ${String(token).replace(/^\"|\"$/g,'')}` }
-      : {}
-    const res = await fetch(`${(api as any).base}/transactions/export.csv`, { headers })
-    const blob = await res.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url; a.download = 'transactions.csv'; a.click()
-    URL.revokeObjectURL(url)
+    if(exporting) return
+    setExporting(true)
+    try{
+      await (api as any).exportTransactionsCSV(status || undefined)
+      push('Downloaded transactions.csv', 'success')
+    }catch(err: any){
+      push(err?.message || 'Export failed', 'error')
+    }finally{ setExporting(false) }
   }
 
   return (
@@ -104,7 +106,7 @@ export default function DoctorTransactions(){
           <option value="refunded">Refunded</option>
         </select>
         <button className="btn btn-primary" onClick={load}>Filter</button>
-        <button className="btn btn-ghost" onClick={exportCSV}>Export CSV</button>
+        <button className="btn btn-ghost" onClick={exportCSV} disabled={exporting}>{exporting ? 'Exporting…' : 'Export CSV'}</button>
       </div>
 
       {loading ? (

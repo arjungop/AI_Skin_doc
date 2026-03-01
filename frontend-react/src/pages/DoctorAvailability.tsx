@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { api } from '../services/api.js'
+import { useToast } from '../components/Toast.jsx'
 
 type Slot = { weekday:number; start_time:string; end_time:string; timezone?:string }
 
@@ -19,6 +20,7 @@ function useDoctorId(){
 
 export default function DoctorAvailability(){
   const doctorId = useDoctorId()
+  const { push } = useToast()
   const [slots, setSlots] = useState<Slot[]>([])
   const [tz, setTz] = useState<string>(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC')
   const [saving, setSaving] = useState(false)
@@ -53,7 +55,10 @@ export default function DoctorAvailability(){
     try{
       await api.setDoctorAvailability(doctorId, slots.map(s=>({ ...s, timezone: tz })))
       setSaved(true)
+      push('Availability saved', 'success')
       setTimeout(()=>setSaved(false), 2000)
+    }catch(err: any){
+      push(err?.message || 'Failed to save availability', 'error')
     }finally{ setSaving(false) }
   }
 

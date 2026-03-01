@@ -11,6 +11,7 @@ export default function Appointments() {
   const [doctorId, setDoctorId] = useState('')
   const [date, setDate] = useState('')
   const [slots, setSlots] = useState([])
+  const [bookedSlots, setBookedSlots] = useState([])
   const [selectedSlot, setSelectedSlot] = useState('')
   const [reason, setReason] = useState('')
   const pid = parseInt(localStorage.getItem('patient_id'))
@@ -36,7 +37,7 @@ export default function Appointments() {
   }, [doctorId])
 
   useEffect(() => {
-    if (!date || availability.length === 0) { setSlots([]); return }
+    if (!date || availability.length === 0) { setSlots([]); setBookedSlots([]); return }
     const d = new Date(date)
     const weekday = d.getDay()
     const avail = availability.filter(a => a.weekday === ((weekday + 6) % 7))
@@ -54,7 +55,10 @@ export default function Appointments() {
     }
     setSlots(s)
     setSelectedSlot('')
-  }, [date, availability])
+    if (doctorId && date) {
+      api.listBookedSlots(doctorId, date).then(b => setBookedSlots(Array.isArray(b) ? b : [])).catch(() => setBookedSlots([]))
+    }
+  }, [date, availability, doctorId])
 
   async function load() {
     setLoading(true)
@@ -172,20 +176,29 @@ export default function Appointments() {
                   <label className="text-sm font-semibold text-slate-500 uppercase tracking-wider block mb-4">Available Slots</label>
                   {date && slots.length > 0 ? (
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
-                      {slots.map(s => (
-                        <button
-                          type="button"
-                          key={s}
-                          onClick={() => setSelectedSlot(s)}
-                          className={`py-2.5 px-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5
-                            ${selectedSlot === s
-                              ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/30 scale-105'
-                              : 'bg-white border border-slate-200 text-slate-600 hover:border-primary-300 hover:text-primary-600'}`}
-                        >
-                          <LuClock size={12} className={selectedSlot === s ? 'opacity-70' : 'text-slate-400'} />
-                          {s}
-                        </button>
-                      ))}
+                      {slots.map(s => {
+                        const isTaken = bookedSlots.includes(s)
+                        const isSelected = selectedSlot === s
+                        return (
+                          <button
+                            type="button"
+                            key={s}
+                            disabled={isTaken}
+                            onClick={() => !isTaken && setSelectedSlot(s)}
+                            title={isTaken ? 'Already booked' : s}
+                            className={`py-2.5 px-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5 ${
+                              isTaken
+                                ? 'bg-slate-100 border border-slate-200 text-slate-300 cursor-not-allowed line-through'
+                                : isSelected
+                                  ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/30 scale-105'
+                                  : 'bg-white border border-slate-200 text-slate-600 hover:border-primary-300 hover:text-primary-600'
+                            }`}
+                          >
+                            <LuClock size={12} className={isTaken ? 'opacity-30' : isSelected ? 'opacity-70' : 'text-slate-400'} />
+                            {s}
+                          </button>
+                        )
+                      })}
                     </div>
                   ) : (
                     <div className="text-center py-8 text-slate-400 flex flex-col items-center">
