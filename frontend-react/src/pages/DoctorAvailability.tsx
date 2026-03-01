@@ -23,13 +23,15 @@ export default function DoctorAvailability(){
   const [tz, setTz] = useState<string>(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string|null>(null)
 
   async function load(){
     if(!doctorId) return
     try{
+      setError(null)
       const rows: any[] = await api.listDoctorAvailability(doctorId)
       setSlots((rows||[]).map(r=>({ weekday:r.weekday, start_time:r.start_time, end_time:r.end_time, timezone:r.timezone })))
-    }catch{}
+    }catch(err: any){ setError(err?.message || 'Failed to load availability') }
   }
   useEffect(()=>{ load() },[doctorId])
 
@@ -77,6 +79,14 @@ export default function DoctorAvailability(){
 
   return (
     <div className="space-y-6">
+      {error && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+          <span>⚠</span>
+          <span>{error}</span>
+          <button className="ml-auto text-xs underline" onClick={load}>Retry</button>
+        </div>
+      )}
+
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Availability</h1>

@@ -45,7 +45,9 @@ export default function Dashboard() {
           const upcoming = (apptsRes.value || []).filter(a => new Date(a.appointment_date) > now)
           setUpcomingAppts(upcoming)
         }
-      } catch {}
+      } catch(err) {
+        if (mounted) console.error('Dashboard load failed:', err?.message)
+      }
       finally { if (mounted) setDataLoading(false) }
     }
     fetchDashboardData()

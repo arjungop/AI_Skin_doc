@@ -7,11 +7,15 @@ export default function DoctorPatients(){
   const [appointments, setAppointments] = useState<Appt[]>([])
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string|null>(null)
 
   useEffect(()=>{
     ;(async()=>{
-      try{ setAppointments(await api.listAppointments()) }
-      catch{}
+      try{
+        setError(null)
+        setAppointments(await api.listAppointments())
+      }
+      catch(err: any){ setError(err?.message || 'Failed to load patients') }
       finally{ setLoading(false) }
     })()
   },[])
@@ -43,6 +47,14 @@ export default function DoctorPatients(){
           onChange={e=>setQ(e.target.value)}
         />
       </header>
+
+      {error && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+          <span>⚠</span>
+          <span>{error}</span>
+          <button className="ml-auto text-xs underline" onClick={()=>window.location.reload()}>Retry</button>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-12">

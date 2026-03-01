@@ -18,13 +18,18 @@ export default function DoctorTransactions(){
   const [q, setQ] = useState('')
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string|null>(null)
 
   async function load(){
     setLoading(true)
     try{
+      setError(null)
       const data = await api.listTransactions({ q, status })
       setRows(data||[])
-    }catch{ setRows([]) }
+    }catch(err: any){
+      setRows([])
+      setError(err?.message || 'Failed to load transactions')
+    }
     finally{ setLoading(false) }
   }
   useEffect(()=>{ load() },[])
@@ -51,6 +56,14 @@ export default function DoctorTransactions(){
         <h1 className="text-2xl font-semibold">Transactions</h1>
         <p className="text-sm text-slate-500">Billing history and payment records.</p>
       </header>
+
+      {error && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+          <span>⚠</span>
+          <span>{error}</span>
+          <button className="ml-auto text-xs underline" onClick={load}>Retry</button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="card">

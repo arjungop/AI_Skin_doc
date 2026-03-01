@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { api } from '../services/api'
 import ConfirmModal from '../components/ConfirmModal.jsx'
+import { useToast } from '../components/Toast.jsx'
 
 export default function AdminDashboard() {
   const [overview, setOverview] = useState(null)
@@ -37,8 +38,10 @@ export default function AdminDashboard() {
   const usersDebounce = useRef(null)
   const docsDebounce = useRef(null)
 
-  useEffect(() => { (async () => { try { setOverview(await api.adminOverview()) } catch { } })() }, [])
-  async function refreshOverview() { try { setOverview(await api.adminOverview()) } catch { } }
+  const { push } = useToast()
+
+  useEffect(() => { (async () => { try { setOverview(await api.adminOverview()) } catch(err) { push(err?.message || 'Failed to load overview', 'error') } })() }, [])
+  async function refreshOverview() { try { setOverview(await api.adminOverview()) } catch(err) { push(err?.message || 'Failed to refresh overview', 'error') } }
 
   async function loadApps(p = appsPage) {
     const res = await api.adminListDoctorAppsPaged({ status: appsStatus || undefined, q: appsQ || undefined, page: p, page_size: 20 })

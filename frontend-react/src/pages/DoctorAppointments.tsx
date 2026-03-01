@@ -42,11 +42,14 @@ export default function DoctorAppointments(){
   const [noteFor, setNoteFor] = useState<Appt|null>(null)
   const [noteText, setNoteText] = useState('')
 
+  const [error, setError] = useState<string|null>(null)
+
   async function load(){
     try{
+      setError(null)
       const data: Appt[] = await api.listAppointments()
       setItems(data||[])
-    }catch{}
+    }catch(err: any){ setError(err?.message || 'Failed to load appointments') }
   }
   useEffect(()=>{ if(!loading) load() },[loading])
 
@@ -83,6 +86,14 @@ export default function DoctorAppointments(){
 
   return (
     <div className="space-y-6">
+      {error && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+          <span>⚠</span>
+          <span>{error}</span>
+          <button className="ml-auto text-xs underline" onClick={load}>Retry</button>
+        </div>
+      )}
+
       <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Appointments</h1>
