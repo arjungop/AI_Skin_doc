@@ -376,8 +376,11 @@ def build_samples(data_dir: Path, class_to_idx: dict[str, int]) -> list[tuple[st
     padufes_dir = data_dir / "pad_ufes_20"
     meta_path = padufes_dir / "metadata.csv"
     if meta_path.exists():
-        # Images live in a 'padufes/' subfolder (or fallback locations)
+        # Images are split across imgs_part_1/, imgs_part_2/, imgs_part_3/
         img_search_dirs = [
+            padufes_dir / "imgs_part_1",
+            padufes_dir / "imgs_part_2",
+            padufes_dir / "imgs_part_3",
             padufes_dir / "padufes",
             padufes_dir / "images",
             padufes_dir,
