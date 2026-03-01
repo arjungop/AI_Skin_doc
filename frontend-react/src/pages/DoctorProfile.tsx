@@ -11,7 +11,7 @@ export default function DoctorProfile(){
   const [specialization, setSpecialization] = useState('')
   const [visible, setVisible] = useState(true)
   const [saving, setSaving] = useState(false)
-  const { push } = useToast()
+  const { push } = useToast() as { push: (msg: string, kind?: string) => void }
 
   useEffect(()=>{(async()=>{
     try{

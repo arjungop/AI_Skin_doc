@@ -37,7 +37,7 @@ function useDoctorId(){
 
 export default function DoctorAppointments(){
   const { doctorId, loading } = useDoctorId()
-  const { push } = useToast()
+  const { push } = useToast() as { push: (msg: string, kind?: string) => void }
   const [items, setItems] = useState<Appt[]>([])
   const [patientNames, setPatientNames] = useState<Record<number,string>>({})
   const [view, setView] = useState<'day'|'week'|'month'|'table'>('table')

@@ -22,6 +22,8 @@ export function ToastProvider({ children }){
 }
 
 export function useToast(){
-  return useContext(ToastCtx) || { push: ()=>{} }
+  /** @type {{ push: (msg: string, kind?: string) => void }} */
+  const fallback = { push: (_msg, _kind) => {} }
+  return useContext(ToastCtx) || fallback
 }
 

@@ -21,7 +21,7 @@ export default function DoctorTransactions(){
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string|null>(null)
   const [exporting, setExporting] = useState(false)
-  const { push } = useToast()
+  const { push } = useToast() as { push: (msg: string, kind?: string) => void }
 
   async function load(){
     setLoading(true)
@@ -106,7 +106,7 @@ export default function DoctorTransactions(){
           <option value="refunded">Refunded</option>
         </select>
         <button className="btn btn-primary" onClick={load}>Filter</button>
-        <button className="btn btn-ghost" onClick={exportCSV} disabled={exporting}>{exporting ? 'Exporting…' : 'Export CSV'}</button>
+        <button className="btn btn-ghost" onClick={exportCSV}>Export CSV</button>
       </div>
 
       {loading ? (

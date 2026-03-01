@@ -20,7 +20,7 @@ function useDoctorId(){
 
 export default function DoctorAvailability(){
   const doctorId = useDoctorId()
-  const { push } = useToast()
+  const { push } = useToast() as { push: (msg: string, kind?: string) => void }
   const [slots, setSlots] = useState<Slot[]>([])
   const [tz, setTz] = useState<string>(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC')
   const [saving, setSaving] = useState(false)
