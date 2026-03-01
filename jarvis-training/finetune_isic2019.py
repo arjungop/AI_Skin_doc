@@ -144,21 +144,50 @@ class Cfg:
 # DOWNLOAD
 # ============================================================================
 def _download_url(url: str, dest: Path, desc: str = ""):
+    """
+    Download using the fastest available tool:
+      1. aria2c  -x 16  (16 parallel connections — fastest)
+      2. wget    (single connection but faster than urllib)
+      3. curl    (fallback)
+      4. urllib  (last resort)
+    """
+    import subprocess, shutil
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists() and dest.stat().st_size > 1_000_000:
         log.info("  Already downloaded: %s", dest.name)
         return
     log.info("  Downloading %s → %s", desc or url, dest)
-    with urllib.request.urlopen(url) as r, open(dest, "wb") as f:
-        total = int(r.headers.get("Content-Length", 0))
-        bar = tqdm(total=total, unit="B", unit_scale=True, desc=desc, leave=False)
-        while True:
-            chunk = r.read(131_072)   # 128 KB chunks
-            if not chunk:
-                break
-            f.write(chunk)
-            bar.update(len(chunk))
-        bar.close()
+
+    if shutil.which("aria2c"):
+        log.info("  Using aria2c (16 parallel connections) …")
+        subprocess.run([
+            "aria2c", "-x", "16", "-s", "16", "-k", "1M",
+            "--file-allocation=none",
+            "--console-log-level=warn",
+            "-o", dest.name, "-d", str(dest.parent), url,
+        ], check=True)
+    elif shutil.which("wget"):
+        log.info("  Using wget …")
+        subprocess.run([
+            "wget", "-q", "--show-progress", "-c", url, "-O", str(dest),
+        ], check=True)
+    elif shutil.which("curl"):
+        log.info("  Using curl …")
+        subprocess.run([
+            "curl", "-L", "-C", "-", "--progress-bar", url, "-o", str(dest),
+        ], check=True)
+    else:
+        log.info("  Using urllib (no wget/aria2c found) …")
+        with urllib.request.urlopen(url) as r, open(dest, "wb") as f:
+            total = int(r.headers.get("Content-Length", 0))
+            bar = tqdm(total=total, unit="B", unit_scale=True, desc=desc, leave=False)
+            while True:
+                chunk = r.read(131_072)
+                if not chunk:
+                    break
+                f.write(chunk)
+                bar.update(len(chunk))
+            bar.close()
 
 
 def download_isic2019(data_dir: Path) -> tuple[Path, Path]:
