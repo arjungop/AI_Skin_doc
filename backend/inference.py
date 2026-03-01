@@ -40,6 +40,16 @@ DEFAULT_IMG_SIZE = 384
 IMAGENET_MEAN    = [0.485, 0.456, 0.406]
 IMAGENET_STD     = [0.229, 0.224, 0.225]
 
+# Post-hoc logit bias: subtract from logits before softmax to correct
+# known training-data biases (clinical→smartphone domain gap).
+# Negative = penalise, Positive = boost.
+LOGIT_BIAS: dict[str, float] = {
+    "impetigo": -3.5,  # over-predicted on smartphone photos
+}
+
+# Temperature for softmax: T > 1 softens overconfident distributions.
+SOFTMAX_TEMPERATURE: float = 1.3
+
 # --------------------------------------------------------------------------- #
 #  Singleton cache                                                             #
 # --------------------------------------------------------------------------- #
@@ -104,6 +114,13 @@ class SkinInference:
         self._cancer_indices: list[int] = [
             i for i, c in enumerate(self.classes) if c in CANCER_CLASSES
         ]
+
+        # ── Logit bias vector (applied before softmax) ────────────────────── #
+        bias = torch.zeros(len(self.classes))
+        for cls, val in LOGIT_BIAS.items():
+            if cls in self.classes:
+                bias[self.classes.index(cls)] = val
+        self._logit_bias = bias
 
         # ── Transform (must match training: 384 px center-crop) ───────────── #
         self.img_size = int(img_size or os.getenv("LESION_IMG_SIZE", DEFAULT_IMG_SIZE))
@@ -237,7 +254,10 @@ class SkinInference:
         with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=use_amp):
             logits = self.model(x)
 
-        probs = F.softmax(logits, dim=1)[0].float().cpu()
+        # Apply logit bias + temperature scaling
+        logits = logits.float().cpu()[0]
+        logits = logits + self._logit_bias
+        probs = F.softmax(logits / SOFTMAX_TEMPERATURE, dim=0)
 
         pred_idx    = int(probs.argmax())
         label       = self.classes[pred_idx]
