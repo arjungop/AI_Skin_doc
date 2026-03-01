@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from '../services/api'
-import { LuSend, LuSparkles, LuUser, LuTrash2, LuMessageCircle, LuPlus, LuHistory, LuBot } from 'react-icons/lu'
+import { LuSend, LuSparkles, LuUser, LuTrash2, LuMessageCircle, LuPlus, LuHistory, LuBot, LuX } from 'react-icons/lu'
 import { Card, CardTitle, IconWrapper } from '../components/Card'
 
 export default function Chat() {
@@ -24,21 +24,30 @@ export default function Chat() {
   const chunkBuffer = useRef('')
   const updateTimeout = useRef(null)
 
+  const mountedRef = useRef(true)
+
   useEffect(() => {
-    api.llmStatus().then(s => setStatus(s.provider)).catch(() => { })
+    api.llmStatus().then(s => { if (mountedRef.current) setStatus(s.provider) }).catch(() => { })
     try {
       const saved = JSON.parse(localStorage.getItem('chat_history') || '[]')
       if (Array.isArray(saved)) setMessages(saved)
     } catch { }
     const hasSession = !!(localStorage.getItem('user_id') || localStorage.getItem('patient_id'))
-    if (hasSession) { api.aiListSessions().then(setSessions).catch(() => { }) }
+    if (hasSession) { api.aiListSessions().then(s => { if (mountedRef.current) setSessions(s) }).catch(() => { }) }
+    return () => {
+      mountedRef.current = false
+      if (updateTimeout.current) { clearTimeout(updateTimeout.current); updateTimeout.current = null }
+    }
   }, [])
 
   useEffect(() => {
-    try { localStorage.setItem('chat_history', JSON.stringify(messages.slice(-50))) } catch { }
+    try {
+      const toSave = messages.slice(-50).map(m => ({ who: m.who, text: (m.text || '').slice(0, 5000) }))
+      localStorage.setItem('chat_history', JSON.stringify(toSave))
+    } catch { /* localStorage quota exceeded - silently ignore */ }
     if (scrollRef.current) {
       requestAnimationFrame(() => {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+        if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
       })
     }
   }, [messages])
@@ -103,8 +112,12 @@ export default function Chat() {
     'Explain the ABCDE rule for moles',
   ], [])
 
+  const [sessionError, setSessionError] = useState('')
+  const [showMobileHistory, setShowMobileHistory] = useState(false)
+
   async function saveCurrentToHistory() {
     if (!messages || messages.length === 0) return
+    setSessionError('')
     let title = messages.find(m => m.who === 'You')?.text || 'New Session'
     if (title.length > 30) title = title.slice(0, 30) + '…'
     try {
@@ -114,20 +127,23 @@ export default function Chat() {
         await api.aiAddSessionMessage(sess.session_id, role, m.text || '')
       }
       const list = await api.aiListSessions(); setSessions(list); setSelectedSession(sess.session_id)
-    } catch { }
+    } catch { setSessionError('Failed to save conversation') }
   }
 
   async function loadSession(id) {
     setSelectedSession(id)
+    setSessionError('')
+    setShowMobileHistory(false)
     try {
       const msgs = await api.aiListSessionMessages(id)
       const ui = msgs.map(m => ({ who: m.role === 'user' ? 'You' : 'AI', text: m.content }))
       setMessages(ui)
-    } catch { }
+    } catch { setSessionError('Failed to load conversation') }
   }
 
   async function deleteSession(id) {
-    try { await api.aiDeleteSession(id) } catch { }
+    setSessionError('')
+    try { await api.aiDeleteSession(id) } catch { setSessionError('Failed to delete conversation') }
     const list = await api.aiListSessions().catch(() => [])
     setSessions(list)
     if (selectedSession === id) { setSelectedSession(null); setMessages([]) }
@@ -153,10 +169,18 @@ export default function Chat() {
               </div>
             </div>
             <div className="flex gap-2">
+              <button onClick={() => setShowMobileHistory(!showMobileHistory)} className="xl:hidden btn btn-ghost text-xs px-3 py-2" aria-label="Chat history"><LuHistory size={16} /></button>
               <button onClick={() => { setMessages([]); setSelectedSession(null) }} className="btn btn-ghost text-xs px-3 py-2">New Chat</button>
               <button onClick={saveCurrentToHistory} className="btn btn-ghost text-xs px-3 py-2">Save</button>
             </div>
           </div>
+
+          {/* Session Error / Info Banner */}
+          {sessionError && (
+            <div className="bg-rose-50 text-rose-600 text-xs font-medium px-4 py-2 text-center border-b border-rose-100" role="alert">
+              {sessionError}
+            </div>
+          )}
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50" ref={scrollRef}>
@@ -268,6 +292,45 @@ export default function Chat() {
           </div>
         </Card>
       </aside>
+
+      {/* Mobile History Overlay */}
+      <AnimatePresence>
+        {showMobileHistory && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="xl:hidden fixed inset-0 z-50 bg-black/30 flex justify-end"
+            onClick={() => setShowMobileHistory(false)}
+          >
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25 }}
+              className="w-80 bg-white h-full shadow-2xl overflow-y-auto p-4 space-y-2"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-bold text-slate-900 flex items-center gap-2"><LuHistory size={18} /> History</h2>
+                <button onClick={() => setShowMobileHistory(false)} className="p-1 text-slate-400 hover:text-slate-600" aria-label="Close history"><LuX size={18} /></button>
+              </div>
+              {sessions.map(s => (
+                <div key={s.session_id} className={`group p-3 rounded-xl border transition-all cursor-pointer relative ${selectedSession === s.session_id ? 'bg-violet-50 border-violet-100' : 'bg-white border-slate-200 hover:bg-slate-50'}`}
+                  onClick={() => loadSession(s.session_id)}>
+                  <div className="text-sm font-medium truncate pr-6">{s.title}</div>
+                  <div className="text-xs text-slate-400 mt-1">{new Date(s.created_at).toLocaleDateString()}</div>
+                  <button onClick={(e) => { e.stopPropagation(); deleteSession(s.session_id) }}
+                    className="absolute right-2 top-3 text-slate-300 hover:text-rose-500">
+                    <LuTrash2 size={14} />
+                  </button>
+                </div>
+              ))}
+              {sessions.length === 0 && <div className="text-slate-400 text-sm text-center py-10 italic">No saved conversations</div>}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

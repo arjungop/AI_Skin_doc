@@ -39,14 +39,28 @@ def create_appointment(
 
     duration_min = int(os.getenv("APPOINTMENT_DURATION_MINUTES", "30"))
     end_dt = appt_dt + timedelta(minutes=duration_min)
+
+    # Doctor conflict check
     existing = db.query(models.Appointment).filter(
         models.Appointment.doctor_id == data.doctor_id,
+        models.Appointment.status.in_(["Scheduled", "Confirmed"]),
         models.Appointment.appointment_date < end_dt,
     ).all()
     for e in existing:
         e_end = e.appointment_date + timedelta(minutes=duration_min)
         if not (e_end <= appt_dt or e.appointment_date >= end_dt):
             raise HTTPException(status_code=400, detail="Time slot already booked")
+
+    # Patient conflict check — prevent overlapping appointments for the same patient
+    patient_existing = db.query(models.Appointment).filter(
+        models.Appointment.patient_id == data.patient_id,
+        models.Appointment.status.in_(["Scheduled", "Confirmed"]),
+        models.Appointment.appointment_date < end_dt,
+    ).all()
+    for e in patient_existing:
+        e_end = e.appointment_date + timedelta(minutes=duration_min)
+        if not (e_end <= appt_dt or e.appointment_date >= end_dt):
+            raise HTTPException(status_code=400, detail="You already have an appointment at this time")
 
     return crud.create_appointment(db, data)
 

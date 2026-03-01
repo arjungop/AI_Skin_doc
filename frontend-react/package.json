@@ -15,14 +15,16 @@
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
     "framer-motion": "^11.3.28",
+    "leaflet": "^1.9.4",
     "lucide-react": "^0.563.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-icons": "^5.5.0",
+    "react-leaflet": "^4.2.1",
     "react-markdown": "^9.0.1",
     "react-router-dom": "^6.26.2",
     "tailwind-merge": "^3.4.0",
-    "three": "^0.160.0"
+    "three": "^0.163.0"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",

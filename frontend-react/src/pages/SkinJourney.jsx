@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { LuPlus, LuX, LuCalendar, LuImage, LuCamera, LuChevronLeft, LuChevronRight, LuHash, LuLayoutGrid, LuScale, LuTrash2 } from 'react-icons/lu'
 import { api } from '../services/api'
 import { Card, CardTitle, CardDescription, IconWrapper, CardBadge } from '../components/Card'
+import { compressImage } from '../utils/imageUtils'
 
 export default function SkinJourney() {
     const [logs, setLogs] = useState([])
@@ -17,8 +18,12 @@ export default function SkinJourney() {
     const [selectedZones, setSelectedZones] = useState([])
     const [submitting, setSubmitting] = useState(false)
 
+    const [deleteConfirm, setDeleteConfirm] = useState(null)
+    const prevPreviewRef = useRef(null)
+
+    // Cleanup preview URL on unmount
     useEffect(() => {
-        fetchLogs()
+        return () => { if (prevPreviewRef.current) URL.revokeObjectURL(prevPreviewRef.current) }
     }, [])
 
     const handleZoneSelect = (zone) => {
@@ -42,23 +47,34 @@ export default function SkinJourney() {
         }
     }
 
+    useEffect(() => {
+        fetchLogs()
+    }, [])
+
     const handleDelete = async (logId) => {
-        if (!confirm('Are you sure you want to delete this entry?')) return
         try {
             await api.deleteJourneyLog(logId)
             setLogs(prev => prev.filter(log => log.log_id !== logId))
+            setDeleteConfirm(null)
         } catch (err) {
             console.error('Failed to delete log:', err)
-            alert('Failed to delete entry. Please try again.')
+            setDeleteConfirm(null)
         }
     }
 
     const handleImageSelect = (e) => {
         const file = e.target.files[0]
-        if (file) {
-            setSelectedImage(file)
-            setPreviewUrl(URL.createObjectURL(file))
+        if (!file) return
+        if (file.size > 10 * 1024 * 1024) {
+            alert('Image must be under 10MB')
+            return
         }
+        // Revoke previous preview URL to prevent memory leak
+        if (prevPreviewRef.current) URL.revokeObjectURL(prevPreviewRef.current)
+        const url = URL.createObjectURL(file)
+        prevPreviewRef.current = url
+        setSelectedImage(file)
+        setPreviewUrl(url)
     }
 
     const handleSubmit = async (e) => {
@@ -67,11 +83,8 @@ export default function SkinJourney() {
         try {
             let finalImagePath = ''
             if (selectedImage) {
-                const reader = new FileReader()
-                finalImagePath = await new Promise((resolve) => {
-                    reader.onload = (e) => resolve(e.target.result)
-                    reader.readAsDataURL(selectedImage)
-                })
+                // Compress image before encoding to reduce payload size
+                finalImagePath = await compressImage(selectedImage)
             }
 
             const manualTags = tags.split(',').map(t => t.trim()).filter(Boolean)
@@ -164,9 +177,10 @@ export default function SkinJourney() {
                                                         {log.created_at ? new Date(log.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Unknown date'}
                                                     </div>
                                                     <button
-                                                        onClick={(e) => { e.stopPropagation(); handleDelete(log.log_id); }}
+                                                        onClick={(e) => { e.stopPropagation(); setDeleteConfirm(log.log_id); }}
                                                         className="absolute top-3 right-3 w-8 h-8 bg-white/90 hover:bg-rose-500 backdrop-blur-sm rounded-full flex items-center justify-center text-slate-400 hover:text-white opacity-0 group-hover:opacity-100 transition-all shadow-sm"
                                                         title="Delete entry"
+                                                        aria-label="Delete entry"
                                                     >
                                                         <LuTrash2 size={14} />
                                                     </button>
@@ -312,6 +326,37 @@ export default function SkinJourney() {
                                         {submitting ? 'Saving...' : 'Save Entry'}
                                     </motion.button>
                                 </form>
+                            </motion.div>
+                        </div>
+                    )}
+                </AnimatePresence>
+
+                {/* Delete Confirmation Modal */}
+                <AnimatePresence>
+                    {deleteConfirm && (
+                        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.9 }}
+                                className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full"
+                            >
+                                <h3 className="text-lg font-semibold text-slate-800 mb-2">Delete Entry</h3>
+                                <p className="text-slate-600 text-sm mb-6">Are you sure you want to delete this skin log? This action cannot be undone.</p>
+                                <div className="flex gap-3 justify-end">
+                                    <button
+                                        onClick={() => setDeleteConfirm(null)}
+                                        className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={() => handleDelete(deleteConfirm)}
+                                        className="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-xl hover:bg-red-600 transition-colors"
+                                    >
+                                        Delete
+                                    </button>
+                                </div>
                             </motion.div>
                         </div>
                     )}

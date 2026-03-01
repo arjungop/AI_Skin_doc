@@ -1,8 +1,12 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Float, Boolean, Text, Enum
 from sqlalchemy.orm import relationship
 from .database import Base
-from datetime import datetime
+from datetime import datetime, timezone
 import enum
+
+
+def _utcnow():
+    return datetime.now(timezone.utc)
 
 class MessageType(str, enum.Enum):
     TEXT = "text"
@@ -34,7 +38,7 @@ class User(Base):
 class Patient(Base):
     __tablename__ = "patients"
     patient_id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
     first_name = Column(String(50), nullable=False)
     last_name = Column(String(50), nullable=False)
     age = Column(Integer, nullable=False)
@@ -47,7 +51,7 @@ class Patient(Base):
 class Doctor(Base):
     __tablename__ = "doctors"
     doctor_id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
     specialization = Column(String(100))
 
     user = relationship("User", back_populates="doctor")
@@ -56,7 +60,7 @@ class Doctor(Base):
 
 class DoctorProfile(Base):
     __tablename__ = "doctor_profiles"
-    doctor_id = Column(Integer, ForeignKey("doctors.doctor_id"), primary_key=True, index=True)
+    doctor_id = Column(Integer, ForeignKey("doctors.doctor_id", ondelete="CASCADE"), primary_key=True, index=True)
     bio = Column(String(4000))
     visibility = Column(String(5), default="true")  # 'true' | 'false'
 
@@ -65,20 +69,20 @@ class DoctorProfile(Base):
 class DoctorApplication(Base):
     __tablename__ = "doctor_applications"
     application_id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
     first_name = Column(String(50))
     last_name = Column(String(50))
     specialization = Column(String(100))
     license_no = Column(String(100))
     hospital = Column(String(150))
     status = Column(String(20), default="PENDING")  # PENDING | APPROVED | REJECTED
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 class Appointment(Base):
     __tablename__ = "appointments"
     appointment_id = Column(Integer, primary_key=True, index=True)
-    patient_id = Column(Integer, ForeignKey("patients.patient_id"), nullable=False)
-    doctor_id = Column(Integer, ForeignKey("doctors.doctor_id"), nullable=False)
+    patient_id = Column(Integer, ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False)
+    doctor_id = Column(Integer, ForeignKey("doctors.doctor_id", ondelete="CASCADE"), nullable=False)
     appointment_date = Column(DateTime, nullable=False)
     reason = Column(String(255))
     status = Column(String(50), default="Scheduled")
@@ -89,32 +93,32 @@ class Appointment(Base):
 class Lesion(Base):
     __tablename__ = "lesions"
     lesion_id = Column(Integer, primary_key=True, index=True)
-    patient_id = Column(Integer, ForeignKey("patients.patient_id"), nullable=False)
+    patient_id = Column(Integer, ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False)
     image_path = Column(String(255))
     prediction = Column(String(100))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
     patient = relationship("Patient", back_populates="lesions")
 
 class Transaction(Base):
     __tablename__ = "transactions"
     transaction_id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
     amount = Column(Float, nullable=False)
     status = Column(String(50), default="pending")
     category = Column(String(30), default="general")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 class TransactionMeta(Base):
     __tablename__ = "transaction_meta"
     id = Column(Integer, primary_key=True, index=True)
-    transaction_id = Column(Integer, ForeignKey("transactions.transaction_id"), nullable=False)
+    transaction_id = Column(Integer, ForeignKey("transactions.transaction_id", ondelete="CASCADE"), nullable=False)
     method = Column(String(30))  # e.g., UPI, Card, Cash, Bank
     reference = Column(String(100))
     note = Column(String(255))
-    refund_of = Column(Integer, ForeignKey("transactions.transaction_id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    refund_of = Column(Integer, ForeignKey("transactions.transaction_id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
 
     transaction = relationship("Transaction", foreign_keys=[transaction_id])
 
@@ -122,11 +126,12 @@ class TransactionMeta(Base):
 class ChatRoom(Base):
     __tablename__ = "chat_rooms"
     room_id = Column(Integer, primary_key=True, index=True)
-    patient_id = Column(Integer, ForeignKey("patients.patient_id"), nullable=False)
-    doctor_id = Column(Integer, ForeignKey("doctors.doctor_id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    last_message_at = Column(DateTime, default=datetime.utcnow)
+    patient_id = Column(Integer, ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False)
+    doctor_id = Column(Integer, ForeignKey("doctors.doctor_id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=_utcnow)
+    last_message_at = Column(DateTime, default=_utcnow)
     is_active = Column(Boolean, default=True)
+    video_link = Column(String(500), nullable=True)
     unread_count_patient = Column(Integer, default=0)  # unread count for patient
     unread_count_doctor = Column(Integer, default=0)   # unread count for doctor
 
@@ -138,19 +143,20 @@ class ChatRoom(Base):
 class Message(Base):
     __tablename__ = "messages"
     message_id = Column(Integer, primary_key=True, index=True)
-    room_id = Column(Integer, ForeignKey("chat_rooms.room_id"), nullable=False)
-    sender_user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    room_id = Column(Integer, ForeignKey("chat_rooms.room_id", ondelete="CASCADE"), nullable=False)
+    sender_user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
     message_type = Column(Enum(MessageType), default=MessageType.TEXT)
     content = Column(Text, nullable=True)  # Text content
     file_url = Column(String(500), nullable=True)  # For attachments
     file_name = Column(String(255), nullable=True)  # Original file name
     file_size = Column(Integer, nullable=True)  # File size in bytes
-    reply_to_message_id = Column(Integer, ForeignKey("messages.message_id"), nullable=True)  # For replies
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    reply_to_message_id = Column(Integer, ForeignKey("messages.message_id", ondelete="SET NULL"), nullable=True)  # For replies
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
     status = Column(Enum(MessageStatus), default=MessageStatus.SENT)
     is_edited = Column(Boolean, default=False)
     is_deleted = Column(Boolean, default=False)
+    is_urgent = Column(Boolean, default=False)
 
     room = relationship("ChatRoom", back_populates="messages")
     sender = relationship("User")
@@ -161,10 +167,10 @@ class Message(Base):
 class MessageReaction(Base):
     __tablename__ = "message_reactions"
     reaction_id = Column(Integer, primary_key=True, index=True)
-    message_id = Column(Integer, ForeignKey("messages.message_id"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    message_id = Column(Integer, ForeignKey("messages.message_id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
     emoji = Column(String(10), nullable=False)  # emoji unicode
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
     message = relationship("Message", back_populates="reactions")
     user = relationship("User")
@@ -172,10 +178,10 @@ class MessageReaction(Base):
 
 class UserOnlineStatus(Base):
     __tablename__ = "user_online_status"
-    user_id = Column(Integer, ForeignKey("users.user_id"), primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), primary_key=True, index=True)
     status = Column(Enum(OnlineStatus), default=OnlineStatus.OFFLINE)
-    last_seen = Column(DateTime, default=datetime.utcnow)
-    last_activity = Column(DateTime, default=datetime.utcnow)
+    last_seen = Column(DateTime, default=_utcnow)
+    last_activity = Column(DateTime, default=_utcnow)
 
     user = relationship("User")
 
@@ -183,7 +189,7 @@ class UserOnlineStatus(Base):
 class DoctorAvailability(Base):
     __tablename__ = "doctor_availability"
     availability_id = Column(Integer, primary_key=True, index=True)
-    doctor_id = Column(Integer, ForeignKey("doctors.doctor_id"), nullable=False)
+    doctor_id = Column(Integer, ForeignKey("doctors.doctor_id", ondelete="CASCADE"), nullable=False)
     weekday = Column(Integer, nullable=False)  # 0=Mon .. 6=Sun
     start_time = Column(String(5), nullable=False)  # "HH:MM" (24h)
     end_time = Column(String(5), nullable=False)
@@ -195,12 +201,12 @@ class DoctorAvailability(Base):
 class LesionReview(Base):
     __tablename__ = "lesion_reviews"
     review_id = Column(Integer, primary_key=True, index=True)
-    lesion_id = Column(Integer, ForeignKey("lesions.lesion_id"), nullable=False)
-    doctor_id = Column(Integer, ForeignKey("doctors.doctor_id"), nullable=False)
+    lesion_id = Column(Integer, ForeignKey("lesions.lesion_id", ondelete="CASCADE"), nullable=False)
+    doctor_id = Column(Integer, ForeignKey("doctors.doctor_id", ondelete="CASCADE"), nullable=False)
     decision = Column(String(20), nullable=False)  # 'confirmed' | 'overridden'
     override_label = Column(String(100))
     comment = Column(String(4000))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
     lesion = relationship("Lesion")
     doctor = relationship("Doctor")
@@ -210,38 +216,38 @@ class LesionReview(Base):
 class AIChatSession(Base):
     __tablename__ = "ai_chat_sessions"
     session_id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
     title = Column(String(120), default="Chat")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 class AIChatMessage(Base):
     __tablename__ = "ai_chat_messages"
     message_id = Column(Integer, primary_key=True, index=True)
-    session_id = Column(Integer, ForeignKey("ai_chat_sessions.session_id"), nullable=False)
+    session_id = Column(Integer, ForeignKey("ai_chat_sessions.session_id", ondelete="CASCADE"), nullable=False)
     role = Column(String(20), nullable=False)  # 'user' | 'assistant' | 'system'
     content = Column(String(4000), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 # Diagnosis reports for lesions
 class DiagnosisReport(Base):
     __tablename__ = "diagnosis_reports"
     report_id = Column(Integer, primary_key=True, index=True)
-    lesion_id = Column(Integer, ForeignKey("lesions.lesion_id"), nullable=False)
-    patient_id = Column(Integer, ForeignKey("patients.patient_id"), nullable=False)
+    lesion_id = Column(Integer, ForeignKey("lesions.lesion_id", ondelete="CASCADE"), nullable=False)
+    patient_id = Column(Integer, ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False)
     prediction = Column(String(100))
     summary = Column(String(255))
     details = Column(String(8000))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 class UserStatus(Base):
     __tablename__ = "user_status"
-    user_id = Column(Integer, ForeignKey("users.user_id"), primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), primary_key=True, index=True)
     status = Column(String(20), default="ACTIVE")  # ACTIVE | SUSPENDED | TERMINATED
     terminated_at = Column(DateTime, nullable=True)
-    terminated_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    terminated_by = Column(Integer, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True)
     termination_reason = Column(String(1000), nullable=True)
 
 # Simple settings store (key/value)
@@ -249,36 +255,36 @@ class Setting(Base):
     __tablename__ = "settings"
     key = Column(String(120), primary_key=True, index=True)
     value = Column(String(2000))
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=_utcnow)
 
 
 class UserTokenVersion(Base):
     __tablename__ = "user_token_versions"
-    user_id = Column(Integer, ForeignKey("users.user_id"), primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), primary_key=True, index=True)
     version = Column(Integer, default=1)
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=_utcnow)
 
 
 # Audit log for admin actions
 class AuditLog(Base):
     __tablename__ = "audit_logs"
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True)
     action = Column(String(120), nullable=False)
     meta = Column(String(4000))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 # Support tables (ORM so it works across MySQL/SQLite)
 class SupportTicket(Base):
     __tablename__ = "support_tickets"
     ticket_id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True)
     name = Column(String(100))
     email = Column(String(150), nullable=False)
     subject = Column(String(255))
     message = Column(String(2000), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 
@@ -286,7 +292,7 @@ class NewsletterSubscriber(Base):
     __tablename__ = "newsletter_subscribers"
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(150), nullable=False, unique=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 # --- Personalization Engine Tables ---
@@ -294,7 +300,7 @@ class NewsletterSubscriber(Base):
 class UserProfile(Base):
     __tablename__ = "user_profiles"
     profile_id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False, unique=True)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, unique=True)
     
     # Skin attributes
     skin_type = Column(String(20)) # Dry, Oily, Combination, Normal
@@ -307,7 +313,7 @@ class UserProfile(Base):
     goals = Column(Text) # JSON list: Anti-aging, Hydration, etc.
     location_city = Column(String(100)) # For weather lookup
     
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
     
     user = relationship("User")
 
@@ -325,31 +331,31 @@ class Product(Base):
     # Embedding is binary (BLOB) for vector search
     embedding = Column(Text) # Storing as base64 or heavy binary if DB supports
     
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 # --- Skin Journey & Routine Tracker Models ---
 
 class SkinLog(Base):
     __tablename__ = "skin_logs"
     log_id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
     image_path = Column(Text, nullable=True) # Base64 image data or path
     notes = Column(Text, nullable=True)
     tags = Column(String(255), nullable=True) # JSON list of tags (e.g. ["acne", "redness"])
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
     
     user = relationship("User")
 
 class RoutineItem(Base):
     __tablename__ = "routine_items"
     item_id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
     product_name = Column(String(255), nullable=False)
-    product_id = Column(Integer, ForeignKey("products.product_id"), nullable=True) # Optional link to specific product
+    product_id = Column(Integer, ForeignKey("products.product_id", ondelete="SET NULL"), nullable=True) # Optional link to specific product
     time_of_day = Column(String(20), nullable=False) # "AM", "PM", "BOTH"
     step_order = Column(Integer, default=1)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
     
     user = relationship("User")
     product = relationship("Product")
@@ -358,9 +364,72 @@ class RoutineItem(Base):
 class RoutineCompletion(Base):
     __tablename__ = "routine_completions"
     completion_id = Column(Integer, primary_key=True, index=True)
-    routine_item_id = Column(Integer, ForeignKey("routine_items.item_id"), nullable=False)
+    routine_item_id = Column(Integer, ForeignKey("routine_items.item_id", ondelete="CASCADE"), nullable=False)
     date = Column(DateTime, nullable=False) # Store as date content (YYYY-MM-DD or datetime)
     status = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
     
     routine_item = relationship("RoutineItem", back_populates="completions")
+
+
+# --- Treatment Plan System (Doctor-prescribed treatment tracking) ---
+
+class TreatmentPlan(Base):
+    __tablename__ = "treatment_plans"
+    plan_id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False)
+    doctor_id = Column(Integer, ForeignKey("doctors.doctor_id", ondelete="CASCADE"), nullable=False)
+    diagnosis = Column(String(500), nullable=False)
+    status = Column(String(20), default="active")  # active | completed | cancelled
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+    patient = relationship("Patient")
+    doctor = relationship("Doctor")
+    steps = relationship("TreatmentStep", back_populates="plan", cascade="all, delete-orphan")
+
+
+class TreatmentStep(Base):
+    __tablename__ = "treatment_steps"
+    step_id = Column(Integer, primary_key=True, index=True)
+    plan_id = Column(Integer, ForeignKey("treatment_plans.plan_id", ondelete="CASCADE"), nullable=False)
+    medication_name = Column(String(255), nullable=False)
+    dosage = Column(String(100), nullable=True)
+    frequency = Column(String(50), default="daily")
+    time_of_day = Column(String(20), default="PM")  # AM | PM | BOTH
+    instructions = Column(Text, nullable=True)
+    step_order = Column(Integer, default=1)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+    plan = relationship("TreatmentPlan", back_populates="steps")
+    adherence_records = relationship("TreatmentAdherence", back_populates="step", cascade="all, delete-orphan")
+
+
+class TreatmentAdherence(Base):
+    __tablename__ = "treatment_adherence"
+    adherence_id = Column(Integer, primary_key=True, index=True)
+    step_id = Column(Integer, ForeignKey("treatment_steps.step_id", ondelete="CASCADE"), nullable=False)
+    date = Column(DateTime, nullable=False, default=_utcnow)
+    taken = Column(Boolean, default=True)
+    side_effects = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+    step = relationship("TreatmentStep", back_populates="adherence_records")
+
+
+# --- Doctor Suggestions (product suggestions tied to diagnosis reports) ---
+
+class DoctorSuggestion(Base):
+    __tablename__ = "doctor_suggestions"
+    suggestion_id = Column(Integer, primary_key=True, index=True)
+    report_id = Column(Integer, ForeignKey("diagnosis_reports.report_id", ondelete="CASCADE"), nullable=False)
+    doctor_id = Column(Integer, ForeignKey("doctors.doctor_id", ondelete="CASCADE"), nullable=False)
+    product_name = Column(String(255), nullable=False)
+    product_link = Column(String(500), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+    report = relationship("DiagnosisReport")
+    doctor = relationship("Doctor")

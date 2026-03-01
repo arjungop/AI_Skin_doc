@@ -1,6 +1,22 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from datetime import datetime
 from typing import Optional
+import re
+
+
+def _validate_password_strength(password: str) -> str:
+    if len(password) < 8:
+        raise ValueError("Password must be at least 8 characters")
+    if not re.search(r"[A-Z]", password):
+        raise ValueError("Password must contain at least one uppercase letter")
+    if not re.search(r"[a-z]", password):
+        raise ValueError("Password must contain at least one lowercase letter")
+    if not re.search(r"\d", password):
+        raise ValueError("Password must contain at least one digit")
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>_\-+=\[\]\\;'/`~]", password):
+        raise ValueError("Password must contain at least one special character")
+    return password
+
 
 class PatientCreate(BaseModel):
     username: Optional[str] = None
@@ -10,6 +26,11 @@ class PatientCreate(BaseModel):
     last_name: str
     age: int
     gender: str
+
+    @field_validator("password")
+    @classmethod
+    def check_password(cls, v: str) -> str:
+        return _validate_password_strength(v)
 
 class PatientLogin(BaseModel):
     email: EmailStr
@@ -67,26 +88,7 @@ class TransactionOut(TransactionCreate):
 
     model_config = {"from_attributes": True}
 
-class TransactionStatusUpdate(BaseModel):
-    status: str
-    reason: Optional[str] = None
 
-class TransactionsSummaryOut(BaseModel):
-    pending: float
-    completed: float
-    failed: float
-    refunded: float | None = 0.0
-    count: int
-
-class TransactionMetaIn(BaseModel):
-    method: Optional[str] = None
-    reference: Optional[str] = None
-    note: Optional[str] = None
-
-class TransactionDetailOut(TransactionOut):
-    method: Optional[str] = None
-    reference: Optional[str] = None
-    note: Optional[str] = None
 
 # Doctors
 class DoctorOut(BaseModel):
@@ -106,6 +108,11 @@ class DoctorApply(BaseModel):
     specialization: Optional[str] = None
     license_no: Optional[str] = None
     department: Optional[str] = None
+
+    @field_validator("password")
+    @classmethod
+    def check_password(cls, v: str) -> str:
+        return _validate_password_strength(v)
 
 class DoctorApplicationOut(BaseModel):
     application_id: int
@@ -134,21 +141,19 @@ class ChatRoomOut(BaseModel):
     created_at: datetime
     last_message_at: datetime
     is_active: bool
+    video_link: Optional[str] = None
     unread_count_patient: int
     unread_count_doctor: int
-    patient: Optional[dict] = None  # Will be populated with patient info
-    doctor: Optional[dict] = None   # Will be populated with doctor info
-    last_message: Optional[dict] = None  # Last message preview
+    patient: Optional[dict] = None
+    doctor: Optional[dict] = None
+    last_message: Optional[dict] = None
 
     model_config = {"from_attributes": True}
 
 class MessageCreate(BaseModel):
     content: Optional[str] = None
-    message_type: str = "text"  # text, image, file, system
-    file_url: Optional[str] = None
-    file_name: Optional[str] = None
-    file_size: Optional[int] = None
     reply_to_message_id: Optional[int] = None
+    is_urgent: bool = False
 
 class MessageOut(BaseModel):
     message_id: int
@@ -156,18 +161,15 @@ class MessageOut(BaseModel):
     sender_user_id: int
     message_type: str
     content: Optional[str] = None
-    file_url: Optional[str] = None
-    file_name: Optional[str] = None
-    file_size: Optional[int] = None
     reply_to_message_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
     status: str
     is_edited: bool
     is_deleted: bool
-    sender: Optional[dict] = None  # Will be populated with sender info
-    reply_to: Optional[dict] = None  # Referenced message if this is a reply
-    reactions: Optional[list] = None  # Message reactions
+    is_urgent: bool = False
+    sender: Optional[dict] = None
+    reply_to: Optional[dict] = None
 
     model_config = {"from_attributes": True}
 
@@ -175,26 +177,8 @@ class MessageUpdate(BaseModel):
     content: Optional[str] = None
     is_deleted: Optional[bool] = None
 
-class MessageReactionCreate(BaseModel):
-    emoji: str
-
-class MessageReactionOut(BaseModel):
-    reaction_id: int
-    message_id: int
-    user_id: int
-    emoji: str
-    created_at: datetime
-    user: Optional[dict] = None
-
-    model_config = {"from_attributes": True}
-
-class UserOnlineStatusOut(BaseModel):
-    user_id: int
-    status: str
-    last_seen: datetime
-    last_activity: datetime
-
-    model_config = {"from_attributes": True}
+class VideoLinkUpdate(BaseModel):
+    video_link: Optional[str] = None
 
 # Availability
 class AvailabilityItem(BaseModel):
@@ -295,27 +279,82 @@ class SkinLogOut(SkinLogCreate):
     created_at: datetime
     model_config = {"from_attributes": True}
 
-# --- Routine Models ---
+# ── Treatment Plan Schemas ────────────────────────────────────────────────
 
-class RoutineItemCreate(BaseModel):
-    product_name: str
-    product_id: Optional[int] = None
-    time_of_day: str # AM, PM, BOTH
-    step_order: int = 1
-    is_active: bool = True
+class TreatmentPlanCreate(BaseModel):
+    patient_id: int
+    doctor_id: Optional[int] = None
+    diagnosis: str
+    notes: Optional[str] = None
 
-class RoutineItemOut(RoutineItemCreate):
-    item_id: int
-    user_id: int
+class TreatmentStepCreate(BaseModel):
+    medication_name: str
+    dosage: Optional[str] = None
+    frequency: Optional[str] = "daily"
+    time_of_day: Optional[str] = "PM"
+    instructions: Optional[str] = None
+    step_order: Optional[int] = 1
+
+class TreatmentStepOut(BaseModel):
+    step_id: int
+    plan_id: int
+    medication_name: str
+    dosage: Optional[str] = None
+    frequency: str
+    time_of_day: str
+    instructions: Optional[str] = None
+    step_order: int
+    is_active: bool
     created_at: datetime
     model_config = {"from_attributes": True}
 
-class RoutineCompletionCreate(BaseModel):
-    routine_item_id: int
-    date: datetime
-    status: bool = True
+class TreatmentPlanOut(BaseModel):
+    plan_id: int
+    patient_id: int
+    doctor_id: int
+    diagnosis: str
+    status: str
+    notes: Optional[str] = None
+    created_at: datetime
+    steps: list[TreatmentStepOut] = []
+    model_config = {"from_attributes": True}
 
-class RoutineCompletionOut(RoutineCompletionCreate):
-    completion_id: int
+class TreatmentAdherenceCreate(BaseModel):
+    step_id: int
+    date: Optional[datetime] = None
+    taken: bool = True
+    side_effects: Optional[str] = None
+    notes: Optional[str] = None
+
+class TreatmentAdherenceOut(BaseModel):
+    adherence_id: int
+    step_id: int
+    date: datetime
+    taken: bool
+    side_effects: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+class SideEffectReport(BaseModel):
+    step_id: int
+    description: str
+    severity: str = "mild"  # mild / moderate / severe
+
+# ── Doctor Suggestion Schemas ─────────────────────────────────────────────
+
+class DoctorSuggestionCreate(BaseModel):
+    report_id: int
+    product_name: str
+    product_link: Optional[str] = None
+    notes: Optional[str] = None
+
+class DoctorSuggestionOut(BaseModel):
+    suggestion_id: int
+    report_id: int
+    doctor_id: int
+    product_name: str
+    product_link: Optional[str] = None
+    notes: Optional[str] = None
     created_at: datetime
     model_config = {"from_attributes": True}

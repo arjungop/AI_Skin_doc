@@ -5,52 +5,68 @@ import { Card, IconWrapper } from '../Card'
 export default function WeatherWidget({ location }) {
     const [weather, setWeather] = useState(null)
     const [loading, setLoading] = useState(false)
+    const [error, setError] = useState(null)
     const [cityName, setCityName] = useState('')
 
     useEffect(() => {
-        if (location?.latitude && location?.longitude) {
-            fetchWeather(location.latitude, location.longitude)
-            fetchCityName(location.latitude, location.longitude)
+        if (!location?.latitude || !location?.longitude) return
+        let cancelled = false
+        const controller = new AbortController()
+
+        const fetchWeather = async () => {
+            setLoading(true)
+            setError(null)
+            try {
+                const res = await fetch(
+                    `https://api.open-meteo.com/v1/forecast?latitude=${location.latitude}&longitude=${location.longitude}&current=temperature_2m,relative_humidity_2m,weather_code&timezone=auto`,
+                    { signal: controller.signal }
+                )
+                if (!res.ok) throw new Error(`Weather API returned ${res.status}`)
+                const data = await res.json()
+                if (cancelled) return
+                if (data.current) {
+                    setWeather({
+                        temp: Math.round(data.current.temperature_2m),
+                        humidity: data.current.relative_humidity_2m,
+                        weatherCode: data.current.weather_code
+                    })
+                } else {
+                    setError('No weather data available')
+                }
+            } catch (err) {
+                if (cancelled) return
+                if (err.name !== 'AbortError') {
+                    console.error('Weather fetch error:', err)
+                    setError('Could not load weather data')
+                }
+            } finally {
+                if (!cancelled) setLoading(false)
+            }
         }
+
+        const fetchCityName = async () => {
+            try {
+                const res = await fetch(
+                    `https://nominatim.openstreetmap.org/reverse?lat=${location.latitude}&lon=${location.longitude}&format=json`,
+                    { headers: { 'User-Agent': 'SkinDoc/1.0' }, signal: controller.signal }
+                )
+                if (!res.ok) { setCityName('Your Location'); return }
+                const data = await res.json()
+                if (cancelled) return
+                if (data.address) {
+                    const city = data.address.city || data.address.town || data.address.village || data.address.suburb || 'Your Location'
+                    setCityName(city)
+                }
+            } catch (err) {
+                if (!cancelled) setCityName('Your Location')
+            }
+        }
+
+        fetchWeather()
+        fetchCityName()
+
+        return () => { cancelled = true; controller.abort() }
     }, [location])
-
-    const fetchWeather = async (lat, lon) => {
-        setLoading(true)
-        try {
-            // Using Open-Meteo free API (no key required)
-            const res = await fetch(
-                `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code&timezone=auto`
-            )
-            const data = await res.json()
-            if (data.current) {
-                setWeather({
-                    temp: Math.round(data.current.temperature_2m),
-                    humidity: data.current.relative_humidity_2m,
-                    weatherCode: data.current.weather_code
-                })
-            }
-        } catch (err) {
-            console.error('Weather fetch error:', err)
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    const fetchCityName = async (lat, lon) => {
-        try {
-            // Reverse geocoding with Open-Meteo geocoding API
-            const res = await fetch(
-                `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`
-            )
-            const data = await res.json()
-            if (data.address) {
-                const city = data.address.city || data.address.town || data.address.village || data.address.suburb || 'Your Location'
-                setCityName(city)
-            }
-        } catch (err) {
-            setCityName('Your Location')
-        }
-    }
 
     const getSkinAdvice = (temp, humidity) => {
         if (humidity > 70) return { text: 'High humidity: Light hydration recommended', color: 'text-blue-600' }
@@ -75,11 +91,25 @@ export default function WeatherWidget({ location }) {
         )
     }
 
-    if (loading || !weather) {
+    if (loading) {
         return (
             <Card className="h-full" hover={false}>
                 <div className="flex items-center justify-center h-full py-8">
                     <LuLoader className="animate-spin text-primary-400" size={24} />
+                </div>
+            </Card>
+        )
+    }
+
+    if (error || !weather) {
+        return (
+            <Card className="h-full" hover={false}>
+                <div className="flex flex-col items-center justify-center h-full py-4 text-center">
+                    <div className="w-12 h-12 rounded-2xl bg-rose-50 flex items-center justify-center border border-rose-200 mb-3">
+                        <LuCloudSun className="text-rose-400" size={22} />
+                    </div>
+                    <p className="text-sm text-rose-500 font-medium mb-1">{error || 'No weather data'}</p>
+                    <p className="text-xs text-slate-400">Weather will update automatically</p>
                 </div>
             </Card>
         )

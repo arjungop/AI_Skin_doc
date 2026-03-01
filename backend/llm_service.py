@@ -1,7 +1,10 @@
 import os
 from typing import List, Dict, Optional
 import json
+import logging
 import requests
+
+_logger = logging.getLogger(__name__)
 
 
 def _provider() -> Optional[str]:
@@ -69,27 +72,26 @@ def _gemini_chat(messages: List[Dict[str, str]]) -> str:
         )
         return (response.text or "").strip()
     except Exception as e:
-        return f"[LLM error: Gemini] {e}"
+        _logger.error("Gemini chat error: %s", e, exc_info=True)
+        return "I'm sorry, I encountered an error processing your request. Please try again."
 
 
 def _gemini_chat_stream(messages: List[Dict[str, str]]):
     try:
         import google.generativeai as genai
     except Exception as e:
-        yield "[LLM error: Gemini streaming not available]"
+        yield "I'm sorry, streaming is not available right now. Please try again."
         return
 
     genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-    # Use the correct model name for the current API
     model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
-    
+
     try:
         model = genai.GenerativeModel(model_name)
-        
-        # Convert messages to Gemini format
+
         prompt_parts = []
         system_content = ""
-        
+
         for msg in messages:
             if msg["role"] == "system":
                 system_content = msg["content"]
@@ -101,26 +103,25 @@ def _gemini_chat_stream(messages: List[Dict[str, str]]):
                     prompt_parts.append(f"User: {msg['content']}")
             elif msg["role"] == "assistant":
                 prompt_parts.append(f"Assistant: {msg['content']}")
-        
+
         full_prompt = "\n\n".join(prompt_parts)
-        
-        # Configure generation parameters for fast streaming
+
         generation_config = genai.types.GenerationConfig(
             temperature=float(os.getenv("LLM_TEMPERATURE", "0.1")),
-            max_output_tokens=1024,  # Faster responses
+            max_output_tokens=1024,
         )
-        
-        # Use streaming response
+
         response = model.generate_content(
-            full_prompt, 
+            full_prompt,
             generation_config=generation_config,
-            stream=True
+            stream=True,
         )
         for chunk in response:
             if chunk.text:
                 yield chunk.text
     except Exception as e:
-        yield f"[LLM error: Gemini] {e}"
+        _logger.error("Gemini stream error: %s", e, exc_info=True)
+        yield "I'm sorry, I encountered an error processing your request. Please try again."
 
 
 def _azure_chat(messages: List[Dict[str, str]]) -> str:
@@ -143,7 +144,8 @@ def _azure_chat(messages: List[Dict[str, str]]) -> str:
         )
         return (resp.choices[0].message.content or "").strip()
     except Exception as e:
-        return f"[LLM error: Azure OpenAI] {e}"
+        _logger.error("Azure OpenAI chat error: %s", e, exc_info=True)
+        return "I'm sorry, I encountered an error processing your request. Please try again."
 
 
 def _openai_chat(messages: List[Dict[str, str]]) -> str:
@@ -161,7 +163,8 @@ def _openai_chat(messages: List[Dict[str, str]]) -> str:
         )
         return (resp.choices[0].message.content or "").strip()
     except Exception as e:
-        return f"[LLM error: OpenAI] {e}"
+        _logger.error("OpenAI chat error: %s", e, exc_info=True)
+        return "I'm sorry, I encountered an error processing your request. Please try again."
 
 
 def _ollama_chat(messages: List[Dict[str, str]]) -> str:
@@ -197,7 +200,8 @@ def _ollama_chat(messages: List[Dict[str, str]]) -> str:
         r.raise_for_status()
         data = r.json()
     except Exception as e:
-        return f"[LLM error: Ollama] {e}"
+        _logger.error("Ollama chat error: %s", e, exc_info=True)
+        return "I'm sorry, I encountered an error processing your request. Please try again."
     # Ollama chat returns {'message': {'role': 'assistant', 'content': '...'}}
     if isinstance(data, dict):
         msg = data.get("message") or {}
@@ -215,7 +219,7 @@ def _openai_chat_stream(messages: List[Dict[str, str]]):
     try:
         from openai import OpenAI
     except Exception as e:
-        yield "[LLM error: OpenAI streaming not available]"
+        yield "I'm sorry, streaming is not available right now. Please try again."
         return
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     model = os.getenv("OPENAI_MODEL")
@@ -231,14 +235,15 @@ def _openai_chat_stream(messages: List[Dict[str, str]]):
             if delta and getattr(delta, "content", None):
                 yield delta.content
     except Exception as e:
-        yield f"[LLM error: OpenAI] {e}"
+        _logger.error("OpenAI stream error: %s", e, exc_info=True)
+        yield "I'm sorry, I encountered an error processing your request. Please try again."
 
 
 def _azure_chat_stream(messages: List[Dict[str, str]]):
     try:
         from openai import AzureOpenAI
     except Exception as e:
-        yield "[LLM error: Azure streaming not available]"
+        yield "I'm sorry, streaming is not available right now. Please try again."
         return
     client = AzureOpenAI(
         api_key=os.getenv("AZURE_OPENAI_API_KEY"),
@@ -258,7 +263,8 @@ def _azure_chat_stream(messages: List[Dict[str, str]]):
             if delta and getattr(delta, "content", None):
                 yield delta.content
     except Exception as e:
-        yield f"[LLM error: Azure] {e}"
+        _logger.error("Azure stream error: %s", e, exc_info=True)
+        yield "I'm sorry, I encountered an error processing your request. Please try again."
 
 
 def _ollama_chat_stream(messages: List[Dict[str, str]]):
@@ -312,7 +318,8 @@ def _ollama_chat_stream(messages: List[Dict[str, str]]):
                 if data.get("done"):
                     break
     except Exception as e:
-        yield f"[LLM error: Ollama] {e}"
+        _logger.error("Ollama stream error: %s", e, exc_info=True)
+        yield "I'm sorry, I encountered an error processing your request. Please try again."
 
 
 def stream_chat_reply(prompt: str, patient: Optional[Dict] = None, history: Optional[List[Dict[str, str]]] = None):

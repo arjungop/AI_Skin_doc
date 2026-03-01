@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 import io
 import csv
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 
 router = APIRouter()
 
@@ -73,36 +73,42 @@ def export_doctor_applications_csv(
 
 
 @router.post("/doctor_applications/{application_id}/approve")
-def approve_doctor_application(application_id: int, db: Session = Depends(get_db), user=Depends(require_roles("ADMIN"))):
-    app = db.query(models.DoctorApplication).filter(models.DoctorApplication.application_id == application_id).first()
+def approve_doctor_application(application_id: int, db: Session = Depends(get_db), admin_user=Depends(require_roles("ADMIN"))):
+    # Lock the row to prevent race conditions on concurrent approval
+    app = db.query(models.DoctorApplication).filter(
+        models.DoctorApplication.application_id == application_id
+    ).with_for_update().first()
     if not app:
         raise HTTPException(status_code=404, detail="Application not found")
     if app.status == "APPROVED":
         return {"message": "Already approved"}
 
-    user = db.query(models.User).filter(models.User.user_id == app.user_id).first()
-    if not user:
+    target_user = db.query(models.User).filter(models.User.user_id == app.user_id).first()
+    if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # Check if doctor profile already exists (idempotency guard)
+    existing_doctor = db.query(models.Doctor).filter(models.Doctor.user_id == target_user.user_id).first()
+    if existing_doctor:
+        app.status = "APPROVED"
+        db.commit()
+        return {"message": "Already approved", "doctor_id": existing_doctor.doctor_id}
+
     # Create doctor profile
-    doctor = models.Doctor(user_id=user.user_id, specialization=app.specialization)
+    doctor = models.Doctor(user_id=target_user.user_id, specialization=app.specialization)
     db.add(doctor)
     # Update statuses
-    user.role = "DOCTOR"
+    target_user.role = "DOCTOR"
     # Set display name to first + last for better UX
     try:
         if app.first_name or app.last_name:
-            user.username = f"{(app.first_name or '').strip()} {(app.last_name or '').strip()}".strip() or user.username
+            target_user.username = f"{(app.first_name or '').strip()} {(app.last_name or '').strip()}".strip() or target_user.username
     except Exception:
         pass
     app.status = "APPROVED"
+    # Audit in same transaction
+    db.add(models.AuditLog(user_id=admin_user.user_id, action="APPROVE_DOCTOR_APPLICATION", meta=str(application_id)))
     db.commit()
-    # Audit
-    try:
-        db.add(models.AuditLog(user_id=user.user_id, action="APPROVE_DOCTOR_APPLICATION", meta=str(application_id)))
-        db.commit()
-    except Exception:
-        db.rollback()
     return {"message": "Approved", "doctor_id": doctor.doctor_id}
 
 
@@ -256,13 +262,13 @@ def terminate_user(user_id: int, body: TerminateBody, db: Session = Depends(get_
         st = models.UserStatus(user_id=user_id)
         db.add(st)
     st.status = 'TERMINATED'
-    st.terminated_at = datetime.utcnow()
+    st.terminated_at = datetime.now(timezone.utc)
     st.terminated_by = who.user_id
     st.termination_reason = f"{body.reason_code}: {(body.reason_text or '').strip()}"
     # Cancel upcoming appointments
     pat = db.query(models.Patient).filter(models.Patient.user_id == user_id).first()
     if pat:
-        upcoming = db.query(models.Appointment).filter(models.Appointment.patient_id == pat.patient_id, models.Appointment.appointment_date >= datetime.utcnow()).all()
+        upcoming = db.query(models.Appointment).filter(models.Appointment.patient_id == pat.patient_id, models.Appointment.appointment_date >= datetime.now(timezone.utc)).all()
         for app in upcoming:
             app.status = 'Cancelled'
             db.add(app)

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { api } from '../services/api'
 import ConfirmModal from '../components/ConfirmModal.jsx'
 
@@ -30,6 +30,12 @@ export default function AdminDashboard() {
   const [logsPage, setLogsPage] = useState(1)
   // Settings
   const [settings, setSettings] = useState({})
+  // Approve/Reject confirmation
+  const [confirmAction, setConfirmAction] = useState({ open: false, id: null, what: '' })
+  // Debounce refs
+  const appsDebounce = useRef(null)
+  const usersDebounce = useRef(null)
+  const docsDebounce = useRef(null)
 
   useEffect(() => { (async () => { try { setOverview(await api.adminOverview()) } catch { } })() }, [])
   async function refreshOverview() { try { setOverview(await api.adminOverview()) } catch { } }
@@ -38,19 +44,19 @@ export default function AdminDashboard() {
     const res = await api.adminListDoctorAppsPaged({ status: appsStatus || undefined, q: appsQ || undefined, page: p, page_size: 20 })
     setApps(res.items || []); setAppsTotal(res.total || 0); setAppsPage(res.page || p)
   }
-  useEffect(() => { loadApps(1) }, [appsStatus, appsQ])
+  useEffect(() => { clearTimeout(appsDebounce.current); appsDebounce.current = setTimeout(() => loadApps(1), 300) }, [appsStatus, appsQ])
 
   async function loadUsers(p = usersPage) {
     const res = await api.adminListUsers({ q: usersQ || undefined, role: usersRole || undefined, page: p, page_size: 20 })
     setUsers(res.items || []); setUsersTotal(res.total || 0); setUsersPage(res.page || p)
   }
-  useEffect(() => { if (tab === 'users') loadUsers(1) }, [tab, usersQ, usersRole])
+  useEffect(() => { if (tab === 'users') { clearTimeout(usersDebounce.current); usersDebounce.current = setTimeout(() => loadUsers(1), 300) } }, [tab, usersQ, usersRole])
 
   async function loadDocs(p = docsPage) {
     const res = await api.adminListDoctors({ q: docsQ || undefined, page: p, page_size: 20 })
     setDocs(res.items || []); setDocsTotal(res.total || 0); setDocsPage(res.page || p)
   }
-  useEffect(() => { if (tab === 'doctors') loadDocs(1) }, [tab, docsQ])
+  useEffect(() => { if (tab === 'doctors') { clearTimeout(docsDebounce.current); docsDebounce.current = setTimeout(() => loadDocs(1), 300) } }, [tab, docsQ])
 
   async function loadLogs(p = logsPage) {
     const res = await api.adminListAudit({ page: p, page_size: 50 })
@@ -70,11 +76,32 @@ export default function AdminDashboard() {
     try {
       if (what === 'approve') await api.adminApproveDoctor(id)
       else await api.adminRejectDoctor(id)
+      setConfirmAction({ open: false, id: null, what: '' })
       await loadApps()
     } catch (e) { alert(e.message) }
   }
 
-  async function exportApps() { try { await api.adminExportDoctorApps({ status: appsStatus || undefined, q: appsQ || undefined }) } catch (e) { alert(e.message) } }
+  async function exportApps() {
+    try {
+      const BASE = import.meta.env.VITE_API_URL || '/api'
+      const params = new URLSearchParams()
+      if (appsStatus) params.set('status', appsStatus)
+      if (appsQ) params.set('q', appsQ)
+      const resp = await fetch(`${BASE}/admin/doctor-applications/export?${params}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      })
+      if (!resp.ok) throw new Error('Export failed')
+      const blob = await resp.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `doctor_applications_${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e) { alert(e.message) }
+  }
 
   // Role changes are handled via Applications approval; no direct role changes here per requirements.
   async function doSuspend() { if (!suspend.user) return; const status = (suspend.user.status === 'SUSPENDED') ? 'ACTIVE' : 'SUSPENDED'; await api.adminUpdateUserStatus(suspend.user.user_id, status); setSuspend({ open: false, user: null }); loadUsers() }
@@ -142,8 +169,8 @@ export default function AdminDashboard() {
                     <td>
                       {a.status === 'PENDING' && (
                         <div className="row">
-                          <button className="btn btn-success btn-sm text-white" onClick={() => act(a.application_id, 'approve')}>Approve</button>
-                          <button className="btn btn-danger btn-sm text-white" onClick={() => act(a.application_id, 'reject')}>Reject</button>
+                          <button className="btn btn-success btn-sm text-white" onClick={() => setConfirmAction({ open: true, id: a.application_id, what: 'approve' })}>Approve</button>
+                          <button className="btn btn-danger btn-sm text-white" onClick={() => setConfirmAction({ open: true, id: a.application_id, what: 'reject' })}>Reject</button>
                         </div>
                       )}
                     </td>
@@ -159,6 +186,15 @@ export default function AdminDashboard() {
               <button className="btn btn-secondary btn-sm" disabled={appsPage >= appsMax} onClick={() => loadApps(appsPage + 1)}>Next</button>
             </div>
           </div>
+          <ConfirmModal
+            open={confirmAction.open}
+            title={`Confirm ${confirmAction.what === 'approve' ? 'Approval' : 'Rejection'}`}
+            onClose={() => setConfirmAction({ open: false, id: null, what: '' })}
+            onConfirm={() => act(confirmAction.id, confirmAction.what)}
+            confirmText={confirmAction.what === 'approve' ? 'Approve' : 'Reject'}
+          >
+            <div className="text-sm">Are you sure you want to {confirmAction.what} this doctor application? This action will be logged.</div>
+          </ConfirmModal>
         </div>
       )}
 

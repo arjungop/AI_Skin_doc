@@ -1,15 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from . import models, database, crud
 from pydantic import BaseModel, EmailStr
 from .security import create_access_token
-from .security import create_access_token
 from .security import get_current_user
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 # Re-export for convenience or define if missing in security
 def get_current_user_id(user: models.User = Depends(get_current_user)) -> int:
     return user.user_id
-from datetime import datetime
+from datetime import datetime, timezone
+
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -20,7 +23,8 @@ class LoginRequest(BaseModel):
 
 
 @router.post("/login")
-def login(req: LoginRequest, db: Session = Depends(database.get_db)):
+@limiter.limit("10/minute")
+def login(request: Request, req: LoginRequest, db: Session = Depends(database.get_db)):
     user = db.query(models.User).filter(models.User.email == req.email).first()
     if not user or not crud.verify_password(req.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -68,7 +72,7 @@ def login(req: LoginRequest, db: Session = Depends(database.get_db)):
         tv = int(tv_row.version or 1)
     except Exception:
         tv = 1
-    token_claims = {"sub": str(user.user_id), "role": user.role, "tv": tv, "iat": int(datetime.utcnow().timestamp())}
+    token_claims = {"sub": str(user.user_id), "role": user.role, "tv": tv, "iat": int(datetime.now(timezone.utc).timestamp())}
     if payload.get("patient_id"):
         token_claims["patient_id"] = payload["patient_id"]
     if payload.get("doctor_id"):
@@ -83,7 +87,8 @@ class ForgotRequest(BaseModel):
 
 
 @router.post("/forgot")
-def forgot_password(req: ForgotRequest):
+@limiter.limit("5/minute")
+def forgot_password(request: Request, req: ForgotRequest):
     # In production: generate token, email user a reset link.
     # For now we simply acknowledge the request to avoid leaking user existence.
     return {"ok": True}
@@ -126,8 +131,19 @@ class ChangePasswordRequest(BaseModel):
 def change_password(req: ChangePasswordRequest, db: Session = Depends(database.get_db), user: models.User = Depends(get_current_user)):
     if not crud.verify_password(req.old_password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Old password incorrect")
-    if len(req.new_password or '') < 8:
-        raise HTTPException(status_code=400, detail="New password too short")
+    # Enforce password strength
+    import re
+    pwd = req.new_password or ''
+    if len(pwd) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+    if not re.search(r"[A-Z]", pwd):
+        raise HTTPException(status_code=400, detail="New password must contain at least one uppercase letter")
+    if not re.search(r"[a-z]", pwd):
+        raise HTTPException(status_code=400, detail="New password must contain at least one lowercase letter")
+    if not re.search(r"\d", pwd):
+        raise HTTPException(status_code=400, detail="New password must contain at least one digit")
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>_\-+=\[\]\\;'/`~]", pwd):
+        raise HTTPException(status_code=400, detail="New password must contain at least one special character")
     user.hashed_password = crud.hash_password(req.new_password)
     db.add(user); db.commit()
     return {"ok": True}
@@ -142,6 +158,6 @@ def logout_all(db: Session = Depends(database.get_db), user: models.User = Depen
         db.add(row)
     else:
         row.version = (row.version or 1) + 1
-    row.updated_at = datetime.utcnow()
+    row.updated_at = datetime.now(timezone.utc)
     db.commit()
     return {"ok": True}

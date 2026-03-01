@@ -1,112 +1,302 @@
+"""
+Treatment Plan Adherence System.
+
+Replaces the generic skincare routine tracker with a medical-grade system
+where doctors prescribe treatment plans and patients track adherence.
+"""
+
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from backend.database import get_db
 from backend import models, schemas
-from backend.auth import get_current_user_id
-from typing import List
+from backend.security import get_current_user
 from datetime import datetime
+from typing import List
 
 router = APIRouter()
 
-# --- Routine Items ---
 
-@router.get("/", response_model=List[schemas.RoutineItemOut])
-def get_routine(
-    user_id: int = Depends(get_current_user_id), 
-    db: Session = Depends(get_db)
+# ── View plans — role-aware ───────────────────────────────────────────
+
+@router.get("/", response_model=List[schemas.TreatmentPlanOut])
+def get_my_plans(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
 ):
-    """Get all routine items"""
-    items = db.query(models.RoutineItem)\
-        .filter(models.RoutineItem.user_id == user_id, models.RoutineItem.is_active == True)\
-        .order_by(models.RoutineItem.step_order.asc())\
+    """
+    Get treatment plans for the current user.
+    - Patients see their own plans.
+    - Doctors see plans they created.
+    - Admins see all plans.
+    """
+    role = (user.role or "").upper()
+
+    if role == "ADMIN":
+        plans = (
+            db.query(models.TreatmentPlan)
+            .options(joinedload(models.TreatmentPlan.steps))
+            .order_by(models.TreatmentPlan.created_at.desc())
+            .all()
+        )
+        return plans
+
+    # Doctor — return plans they created
+    doctor = db.query(models.Doctor).filter(
+        models.Doctor.user_id == user.user_id
+    ).first()
+    if doctor:
+        plans = (
+            db.query(models.TreatmentPlan)
+            .options(joinedload(models.TreatmentPlan.steps))
+            .filter(models.TreatmentPlan.doctor_id == doctor.doctor_id)
+            .order_by(models.TreatmentPlan.created_at.desc())
+            .all()
+        )
+        return plans
+
+    # Patient — return their own plans
+    patient = db.query(models.Patient).filter(
+        models.Patient.user_id == user.user_id
+    ).first()
+    if not patient:
+        return []
+
+    plans = (
+        db.query(models.TreatmentPlan)
+        .options(joinedload(models.TreatmentPlan.steps))
+        .filter(models.TreatmentPlan.patient_id == patient.patient_id)
+        .order_by(models.TreatmentPlan.created_at.desc())
         .all()
-    return items
-
-@router.post("/", response_model=schemas.RoutineItemOut)
-def add_routine_item(
-    item_data: schemas.RoutineItemCreate,
-    user_id: int = Depends(get_current_user_id),
-    db: Session = Depends(get_db)
-):
-    """Add a product to the routine"""
-    new_item = models.RoutineItem(
-        user_id=user_id,
-        **item_data.model_dump()
     )
-    db.add(new_item)
-    db.commit()
-    db.refresh(new_item)
-    return new_item
+    return plans
 
-@router.delete("/{item_id}")
-def delete_routine_item(
-    item_id: int,
-    user_id: int = Depends(get_current_user_id),
-    db: Session = Depends(get_db)
+
+# ── Doctor: create a plan ────────────────────────────────────────────────
+
+@router.post("/plans", response_model=schemas.TreatmentPlanOut)
+def create_plan(
+    data: schemas.TreatmentPlanCreate,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
 ):
-    """Remove an item from routine"""
-    item = db.query(models.RoutineItem).filter(models.RoutineItem.item_id == item_id, models.RoutineItem.user_id == user_id).first()
-    if not item:
-        raise HTTPException(status_code=404, detail="Item not found")
-    
-    item.is_active = False # Soft delete
+    """Doctor creates a treatment plan for a patient."""
+    role = (user.role or "").upper()
+    if role not in ("DOCTOR", "ADMIN"):
+        raise HTTPException(status_code=403, detail="Only doctors can create treatment plans")
+
+    # Resolve doctor_id from user
+    doctor = db.query(models.Doctor).filter(
+        models.Doctor.user_id == user.user_id
+    ).first()
+    if not doctor and role != "ADMIN":
+        raise HTTPException(status_code=403, detail="Doctor profile not found")
+
+    doctor_id = doctor.doctor_id if doctor else data.doctor_id
+
+    # Verify patient exists
+    patient = db.query(models.Patient).filter(
+        models.Patient.patient_id == data.patient_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    plan = models.TreatmentPlan(
+        patient_id=data.patient_id,
+        doctor_id=doctor_id,
+        diagnosis=data.diagnosis,
+        status="active",
+        notes=data.notes,
+    )
+    db.add(plan)
     db.commit()
-    return {"status": "success"}
+    db.refresh(plan)
+    return plan
 
-# --- Completions ---
 
-@router.get("/completions", response_model=List[schemas.RoutineCompletionOut])
-def get_completions(
-    date: str, # YYYY-MM-DD
-    user_id: int = Depends(get_current_user_id),
-    db: Session = Depends(get_db)
+# ── Doctor: add steps to a plan ──────────────────────────────────────────
+
+@router.post("/plans/{plan_id}/steps", response_model=schemas.TreatmentStepOut)
+def add_step(
+    plan_id: int,
+    data: schemas.TreatmentStepCreate,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
 ):
-    """Get completions for a specific date"""
-    # Parse date string to verify format/params
-    try:
-        target_date = datetime.strptime(date, "%Y-%m-%d").date()
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
-        
-    # Join with RoutineItem to ensure user ownership
-    completions = db.query(models.RoutineCompletion)\
-        .join(models.RoutineItem)\
-        .filter(
-            models.RoutineItem.user_id == user_id,
-            # We cast the datetime to date for comparison, depending on DB this might need adjustment
-            # detailed implementation: filter where date component matches
-        )\
+    """Doctor adds a medication step to a treatment plan."""
+    role = (user.role or "").upper()
+    if role not in ("DOCTOR", "ADMIN"):
+        raise HTTPException(status_code=403, detail="Only doctors can modify treatment plans")
+
+    plan = db.query(models.TreatmentPlan).filter(
+        models.TreatmentPlan.plan_id == plan_id
+    ).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Treatment plan not found")
+
+    step = models.TreatmentStep(
+        plan_id=plan_id,
+        medication_name=data.medication_name,
+        dosage=data.dosage,
+        frequency=data.frequency or "daily",
+        time_of_day=data.time_of_day or "PM",
+        instructions=data.instructions,
+        step_order=data.step_order or 1,
+    )
+    db.add(step)
+    db.commit()
+    db.refresh(step)
+    return step
+
+
+# ── Get steps for a plan ─────────────────────────────────────────────────
+
+@router.get("/plans/{plan_id}/steps", response_model=List[schemas.TreatmentStepOut])
+def get_steps(
+    plan_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Get all steps in a treatment plan."""
+    plan = db.query(models.TreatmentPlan).filter(
+        models.TreatmentPlan.plan_id == plan_id
+    ).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+
+    # Verify access: patient or their doctor or admin
+    role = (user.role or "").upper()
+    if role != "ADMIN":
+        patient = db.query(models.Patient).filter(
+            models.Patient.user_id == user.user_id
+        ).first()
+        doctor = db.query(models.Doctor).filter(
+            models.Doctor.user_id == user.user_id
+        ).first()
+        if not (
+            (patient and patient.patient_id == plan.patient_id)
+            or (doctor and doctor.doctor_id == plan.doctor_id)
+        ):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+    steps = (
+        db.query(models.TreatmentStep)
+        .filter(models.TreatmentStep.plan_id == plan_id, models.TreatmentStep.is_active == True)
+        .order_by(models.TreatmentStep.step_order)
         .all()
-    
-    # Simple post-filtering for the specific date if DB specific SQL is complex
-    # In production, use proper SQLAlchemy date casting
-    filtered = [c for c in completions if c.date.date() == target_date]
-    
-    return filtered
-
-@router.post("/check", response_model=schemas.RoutineCompletionOut)
-def toggle_completion(
-    completion_data: schemas.RoutineCompletionCreate,
-    user_id: int = Depends(get_current_user_id),
-    db: Session = Depends(get_db)
-):
-    """Mark a routine item as done"""
-    # Verify ownership
-    item = db.query(models.RoutineItem).filter(models.RoutineItem.item_id == completion_data.routine_item_id, models.RoutineItem.user_id == user_id).first()
-    if not item:
-        raise HTTPException(status_code=404, detail="Routine item not found")
-    
-    # Check if already exists for this date
-    # In this simple logic, we just add a new completion entry. 
-    # Front-end should handle untoggling by not sending or we implement a delete endpoint.
-    # For now, let's assume this endpoint creates the completion.
-    
-    new_completion = models.RoutineCompletion(
-        routine_item_id=completion_data.routine_item_id,
-        date=completion_data.date, # passed as datetime from frontend
-        status=completion_data.status
     )
-    db.add(new_completion)
+    return steps
+
+
+# ── Patient: record adherence ────────────────────────────────────────────
+
+@router.post("/plans/{plan_id}/adherence", response_model=schemas.TreatmentAdherenceOut)
+def record_adherence(
+    plan_id: int,
+    data: schemas.TreatmentAdherenceCreate,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Patient records taking/skipping a medication step."""
+    # Verify plan belongs to patient
+    patient = db.query(models.Patient).filter(
+        models.Patient.user_id == user.user_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=403, detail="Patient profile not found")
+
+    plan = db.query(models.TreatmentPlan).filter(
+        models.TreatmentPlan.plan_id == plan_id,
+        models.TreatmentPlan.patient_id == patient.patient_id,
+    ).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+
+    # Verify step belongs to this plan
+    step = db.query(models.TreatmentStep).filter(
+        models.TreatmentStep.step_id == data.step_id,
+        models.TreatmentStep.plan_id == plan_id,
+    ).first()
+    if not step:
+        raise HTTPException(status_code=404, detail="Treatment step not found in this plan")
+
+    record = models.TreatmentAdherence(
+        step_id=data.step_id,
+        date=data.date or datetime.utcnow(),
+        taken=data.taken,
+        side_effects=data.side_effects,
+        notes=data.notes,
+    )
+    db.add(record)
     db.commit()
-    db.refresh(new_completion)
-    return new_completion
+    db.refresh(record)
+    return record
+
+
+# ── Get adherence for a plan on a date ───────────────────────────────────
+
+@router.get("/plans/{plan_id}/adherence", response_model=List[schemas.TreatmentAdherenceOut])
+def get_adherence(
+    plan_id: int,
+    date: str | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Get adherence records for a plan, optionally filtered by date."""
+    query = (
+        db.query(models.TreatmentAdherence)
+        .join(models.TreatmentStep)
+        .filter(models.TreatmentStep.plan_id == plan_id)
+    )
+
+    if date:
+        try:
+            target = datetime.strptime(date, "%Y-%m-%d").date()
+            records = query.all()
+            return [r for r in records if r.date.date() == target]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Use YYYY-MM-DD date format")
+
+    return query.order_by(models.TreatmentAdherence.date.desc()).limit(100).all()
+
+
+# ── Patient: report side effect ──────────────────────────────────────────
+
+@router.post("/plans/{plan_id}/report-side-effect")
+def report_side_effect(
+    plan_id: int,
+    data: schemas.SideEffectReport,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Patient reports a side effect for a medication step."""
+    patient = db.query(models.Patient).filter(
+        models.Patient.user_id == user.user_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=403, detail="Patient profile not found")
+
+    plan = db.query(models.TreatmentPlan).filter(
+        models.TreatmentPlan.plan_id == plan_id,
+        models.TreatmentPlan.patient_id == patient.patient_id,
+    ).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+
+    step = db.query(models.TreatmentStep).filter(
+        models.TreatmentStep.step_id == data.step_id,
+        models.TreatmentStep.plan_id == plan_id,
+    ).first()
+    if not step:
+        raise HTTPException(status_code=404, detail="Step not found")
+
+    record = models.TreatmentAdherence(
+        step_id=data.step_id,
+        date=datetime.utcnow(),
+        taken=True,
+        side_effects=data.description,
+        notes=f"SEVERITY: {data.severity}",
+    )
+    db.add(record)
+    db.commit()
+
+    return {"status": "reported", "step": step.medication_name, "severity": data.severity}

@@ -1,6 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 import os
 import pathlib
 
@@ -13,6 +14,8 @@ except Exception:
 
 from backend import models, crud
 from backend.database import engine, SessionLocal, run_simple_migrations
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from backend.routes.patients import router as patients_router
 from backend.routes.appointments import router as appointments_router
 from backend.routes.lesions import router as lesions_router
@@ -29,6 +32,7 @@ from backend.routes.profile import router as profile_router
 from backend.routes.journey import router as journey_router
 from backend.routes.routine import router as routine_router
 from backend.routes.recommendations import router as recommendations_router
+from backend.security import require_roles
 
 # Create tables and run lightweight migrations for dev
 models.Base.metadata.create_all(bind=engine)
@@ -38,6 +42,12 @@ except Exception:
     pass
 
 app = FastAPI()
+
+# Rate limiting
+from backend.auth import limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 try:
     # Ensure both '/path' and '/path/' are accepted with 307 redirect
     app.router.redirect_slashes = True  # type: ignore
@@ -65,70 +75,86 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    # Allow all request headers (including Authorization and multipart boundaries)
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
 )
+
+
+# Security headers middleware (#14)
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response: Response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(self)"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+
+# Upload size limit middleware (#10) — 15 MB max
+MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
+
+
+class MaxBodySizeMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > MAX_UPLOAD_BYTES:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=413,
+                content={"detail": f"Request body too large. Maximum is {MAX_UPLOAD_BYTES // (1024*1024)}MB."},
+            )
+        return await call_next(request)
+
+app.add_middleware(MaxBodySizeMiddleware)
 
 # Health check
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
-# DB status (shows sanitized URL and last error if any)
+# DB status — admin only, no internal details leaked
 @app.get("/db/status")
-def db_status():
-    from backend.database import engine
-    url_sanitized = None
-    try:
-        url_sanitized = engine.url.render_as_string(hide_password=True)
-    except Exception:
-        url_sanitized = None
-    last_error = None
+def db_status(_=Depends(require_roles("ADMIN"))):
+    from backend.database import engine as _engine
     ok = True
     try:
-        with engine.connect() as conn:
+        with _engine.connect() as conn:
             conn.exec_driver_sql("SELECT 1")
-    except Exception as e:
+    except Exception:
         ok = False
-        last_error = str(e)
-    return {
-        "ok": ok,
-        "dialect": getattr(engine, 'dialect', None) and engine.dialect.name,
-        "url": url_sanitized,
-        "error": last_error,
-    }
+    return {"ok": ok}
 
-# Bootstrap admin (dev default if none exists)
+# Bootstrap admin (only when env vars are explicitly set)
 try:
-    db = SessionLocal()
-    any_admin = db.query(models.User).filter(models.User.role == "ADMIN").first()
-    if not any_admin:
-        email = os.getenv("ADMIN_EMAIL", "admin@example.com")
-        username = os.getenv("ADMIN_USERNAME", "admin")
-        password = os.getenv("ADMIN_PASSWORD", "Admin@12345")
-        user = db.query(models.User).filter(models.User.email == email).first()
-        if not user:
-            user = models.User(
-                username=username,
-                email=email,
-                hashed_password=crud.hash_password(password),
-                role="ADMIN",
-            )
-            db.add(user)
-            db.commit()
-        else:
-            user.username = username or user.username
-            user.hashed_password = crud.hash_password(password)
-            user.role = "ADMIN"
-            db.commit()
+    _admin_email = os.getenv("ADMIN_EMAIL", "").strip()
+    _admin_username = os.getenv("ADMIN_USERNAME", "").strip()
+    _admin_password = os.getenv("ADMIN_PASSWORD", "").strip()
+    if _admin_email and _admin_username and _admin_password:
+        db = SessionLocal()
+        any_admin = db.query(models.User).filter(models.User.role == "ADMIN").first()
+        if not any_admin:
+            user = db.query(models.User).filter(models.User.email == _admin_email).first()
+            if not user:
+                user = models.User(
+                    username=_admin_username,
+                    email=_admin_email,
+                    hashed_password=crud.hash_password(_admin_password),
+                    role="ADMIN",
+                )
+                db.add(user)
+                db.commit()
+            else:
+                user.username = _admin_username or user.username
+                user.hashed_password = crud.hash_password(_admin_password)
+                user.role = "ADMIN"
+                db.commit()
+        db.close()
 except Exception:
     pass
-finally:
-    try:
-        db.close()
-    except Exception:
-        pass
 
 # Routers
 app.include_router(patients_router, prefix="/patients", tags=["patients"])

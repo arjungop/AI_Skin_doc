@@ -1,69 +1,41 @@
 import { useEffect, useState } from 'react'
-import { LuSun, LuShield, LuMapPin, LuLoader, LuShieldAlert } from 'react-icons/lu'
+import { LuSun, LuShield, LuLoader, LuShieldAlert, LuClock, LuDroplet } from 'react-icons/lu'
 import { Card } from '../Card'
+import { api } from '../../services/api.js'
 
-export default function UVIndexWidget({ location }) {
-    const [uv, setUv] = useState(null)
-    const [loading, setLoading] = useState(false)
+export default function UVIndexWidget() {
+    const [data, setData] = useState(null)
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState(null)
 
     useEffect(() => {
-        if (location?.latitude && location?.longitude) {
-            fetchUV(location.latitude, location.longitude)
-        }
-    }, [location])
+        fetchUVRisk()
+    }, [])
 
-    const fetchUV = async (lat, lon) => {
+    const fetchUVRisk = async () => {
         setLoading(true)
+        setError(null)
         try {
-            // Using Open-Meteo free API for UV data
-            const res = await fetch(
-                `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=uv_index_max&timezone=auto&forecast_days=1`
-            )
-            const data = await res.json()
-            if (data.daily?.uv_index_max?.[0] !== undefined) {
-                setUv(Math.round(data.daily.uv_index_max[0] * 10) / 10)
-            }
+            // Call our backend — auto-detects city from user profile
+            const result = await api.getUVRisk()
+            setData(result)
         } catch (err) {
-            console.error('UV fetch error:', err)
-            setUv(0)
+            console.error('UV risk fetch error:', err)
+            // Graceful fallback: show the widget with an error message
+            setError(err.message || 'Could not fetch UV data')
         } finally {
             setLoading(false)
         }
     }
 
-    const getRiskLevel = (val) => {
-        if (val === null) return { text: 'Unknown', color: 'text-slate-400', bg: 'bg-slate-100' }
-        if (val <= 2) return { text: 'Low', color: 'text-emerald-600', bg: 'bg-emerald-100' }
-        if (val <= 5) return { text: 'Moderate', color: 'text-amber-500', bg: 'bg-amber-100' }
-        if (val <= 7) return { text: 'High', color: 'text-orange-500', bg: 'bg-orange-100' }
-        if (val <= 10) return { text: 'Very High', color: 'text-rose-600', bg: 'bg-rose-100' }
-        return { text: 'Extreme', color: 'text-purple-600', bg: 'bg-purple-100' }
-    }
-
-    const getSPFRecommendation = (val) => {
-        if (val === null) return 'Enable location for UV data'
-        if (val <= 2) return 'Low exposure today'
-        if (val <= 5) return 'SPF 30 recommended'
-        if (val <= 7) return 'Wear SPF 50+'
-        if (val <= 10) return 'SPF 50+ & seek shade'
-        return 'Avoid sun exposure!'
-    }
-
-    const risk = getRiskLevel(uv)
-
-    // Show prompt to enable location if not available
-    if (!location) {
-        return (
-            <Card className="h-full" hover={false}>
-                <div className="flex flex-col items-center justify-center h-full py-4 text-center">
-                    <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center border border-slate-200 mb-3">
-                        <LuSun className="text-slate-400" size={22} />
-                    </div>
-                    <p className="text-sm text-slate-500 font-medium mb-1">Location Required</p>
-                    <p className="text-xs text-slate-400">Enable location to see UV index</p>
-                </div>
-            </Card>
-        )
+    const getRiskColors = (level) => {
+        if (!level) return { color: 'text-slate-400', bg: 'bg-slate-100' }
+        const l = level.toLowerCase()
+        if (l === 'low') return { color: 'text-emerald-600', bg: 'bg-emerald-100' }
+        if (l === 'moderate') return { color: 'text-amber-500', bg: 'bg-amber-100' }
+        if (l === 'high') return { color: 'text-orange-500', bg: 'bg-orange-100' }
+        if (l === 'very high') return { color: 'text-rose-600', bg: 'bg-rose-100' }
+        return { color: 'text-purple-600', bg: 'bg-purple-100' }
     }
 
     if (loading) {
@@ -76,31 +48,72 @@ export default function UVIndexWidget({ location }) {
         )
     }
 
+    if (error || !data) {
+        return (
+            <Card className="h-full" hover={false}>
+                <div className="flex flex-col items-center justify-center h-full py-4 text-center">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center border border-slate-200 mb-3">
+                        <LuSun className="text-slate-400" size={22} />
+                    </div>
+                    <p className="text-sm text-slate-500 font-medium mb-1">UV Data Unavailable</p>
+                    <p className="text-xs text-slate-400">{error || 'Set your city in profile settings'}</p>
+                    <button
+                        onClick={fetchUVRisk}
+                        className="mt-3 text-xs text-primary-500 hover:text-primary-600 font-semibold"
+                    >
+                        Retry
+                    </button>
+                </div>
+            </Card>
+        )
+    }
+
+    const risk = getRiskColors(data.risk_level)
+
     return (
         <Card className="h-full" hover={false}>
-            <div className="flex items-start justify-between">
+            <div className="flex items-start justify-between w-full">
                 <div className="w-full">
                     <div className="text-xs uppercase tracking-widest text-slate-400 font-medium mb-4">
-                        UV Index
+                        UV Risk · {data.city}
                     </div>
 
-                    <div className="flex items-start justify-between w-full mb-6">
+                    <div className="flex items-start justify-between w-full mb-5">
                         <div className="flex flex-col">
-                            <span className="text-5xl font-bold text-slate-800 tracking-tight leading-none mb-1">{uv ?? '--'}</span>
+                            <span className="text-5xl font-bold text-slate-800 tracking-tight leading-none mb-1">
+                                {data.uv_index ?? '--'}
+                            </span>
                             <span className={`inline-flex self-start px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${risk.bg} ${risk.color}`}>
-                                {risk.text}
+                                {data.risk_level}
                             </span>
                         </div>
 
                         <div className={`w-12 h-12 rounded-2xl ${risk.bg} flex items-center justify-center ${risk.color} flex-shrink-0`}>
-                            {uv !== null && uv > 5 ? <LuShieldAlert size={24} /> : <LuSun size={24} />}
+                            {data.uv_index > 5 ? <LuShieldAlert size={24} /> : <LuSun size={24} />}
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2 text-sm text-slate-600 font-medium bg-slate-50 p-3 rounded-xl">
+                    {/* SPF + Exposure Limit */}
+                    <div className="flex items-center gap-2 text-sm text-slate-600 font-medium bg-slate-50 p-3 rounded-xl mb-3">
                         <LuShield className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                        <span>{getSPFRecommendation(uv)}</span>
+                        <span>{data.spf_recommendation}</span>
                     </div>
+
+                    {/* Exposure time */}
+                    {data.exposure_limit_minutes && (
+                        <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 px-3 py-2 rounded-lg">
+                            <LuClock className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                            <span>Max exposure: <strong>{data.exposure_limit_minutes} min</strong></span>
+                        </div>
+                    )}
+
+                    {/* Fitzpatrick personalization indicator */}
+                    {data.fitzpatrick_type && (
+                        <div className="mt-3 text-[10px] text-slate-400 font-medium uppercase tracking-wider flex items-center gap-1.5">
+                            <LuDroplet size={10} />
+                            Personalized for Skin Type {data.fitzpatrick_type}
+                        </div>
+                    )}
                 </div>
             </div>
         </Card>

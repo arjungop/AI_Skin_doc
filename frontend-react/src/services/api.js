@@ -11,14 +11,28 @@ function authHeaders() {
   return h
 }
 
+// Auth expiry event for cross-component session handling
+const AUTH_EXPIRED_EVENT = 'auth:expired'
+
+export function onAuthExpired(callback) {
+  window.addEventListener(AUTH_EXPIRED_EVENT, callback)
+  return () => window.removeEventListener(AUTH_EXPIRED_EVENT, callback)
+}
+
 async function request(path, opts = {}) {
+  if (!navigator.onLine) {
+    throw new Error('You are offline. Please check your internet connection.')
+  }
   const headers = { ...(opts.headers || {}), ...authHeaders() }
   const res = await fetch(`${BASE_URL}${path}`, { ...opts, headers })
   let data = null
   try { data = await res.json() } catch { }
   if (!res.ok) {
     const detail = (data && (data.detail || data.message)) || res.statusText
-    // Do not auto-clear auth on 401; surface error and let the UI handle.
+    if (res.status === 401) {
+      window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT))
+      throw new Error('Session expired. Please log in again.')
+    }
     throw new Error(detail)
   }
   return data
@@ -42,32 +56,19 @@ export const api = {
   // Doctors
   listDoctors: (q) => request(`/doctors${q ? `?q=${encodeURIComponent(q)}` : ''}`),
   applyDoctor: (payload) => request('/doctors/apply', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
-  // Transactions
+  // Transactions (simplified billing log)
   createTransaction: (payload) => request('/transactions/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
   listTransactions: (params) => {
     const q = new URLSearchParams()
     if (!params) params = {}
     if (params.status) q.set('status', params.status)
-    if (params.q) q.set('search', params.q)
     if (params.start) q.set('start', params.start)
     if (params.end) q.set('end', params.end)
     if (params.category) q.set('category', params.category)
-    if (params.method) q.set('method', params.method)
-    if (params.amount_min != null) q.set('amount_min', params.amount_min)
-    if (params.amount_max != null) q.set('amount_max', params.amount_max)
-    if (params.transaction_id) q.set('transaction_id', params.transaction_id)
     const qs = q.toString();
     return request(`/transactions${qs ? `?${qs}` : ''}`)
   },
-  adminListTransactions: (params = {}) => {
-    const q = new URLSearchParams(); Object.entries(params || {}).forEach(([k, v]) => { if (v != null && v !== '') q.set(k, v) })
-    return request(`/transactions/admin_list?${q.toString()}`)
-  },
-  transactionsSummary: (userId) => request(`/transactions/summary${userId ? `?user_id=${encodeURIComponent(userId)}` : ''}`),
-  updateTransactionStatus: (id, status, reason) => request(`/transactions/${id}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, reason }) }),
-  setTransactionMeta: (id, payload) => request(`/transactions/${id}/meta`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
-  refundTransaction: (id) => request(`/transactions/${id}/refund`, { method: 'POST' }),
-  monthly: (months = 12) => request(`/transactions/monthly?months=${months}`),
+  transactionsSummary: () => request('/transactions/summary'),
   // Lesions
   predictLesion: async (patientId, file, opts = {}) => {
     const form = new FormData()
@@ -129,22 +130,23 @@ export const api = {
   adminUpdateUserStatus: (userId, status) => request(`/admin/users/${userId}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }),
   adminTerminateUser: (userId, reason_code, reason_text) => request(`/admin/users/${userId}/terminate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason_code, reason_text }) }),
   adminSyncDoctors: () => request('/admin/sync_doctors', { method: 'POST' }),
-  // Messaging
+  // Messaging (real-time sync + polling fallback)
   listRooms: () => request('/chat/rooms'),
   createRoom: (payload) => request('/chat/rooms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
   listMessages: (roomId, page = 1, limit = 50) => request(`/chat/rooms/${roomId}/messages?page=${page}&limit=${limit}`),
   postMessage: (roomId, payload) => request(`/chat/rooms/${roomId}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
   updateMessage: (messageId, payload) => request(`/chat/messages/${messageId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
-  addReaction: (messageId, emoji) => request(`/chat/messages/${messageId}/reactions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emoji }) }),
-  uploadChatFile: async (roomId, file) => {
-    const form = new FormData()
-    form.append('file', file)
-    return request(`/chat/rooms/${roomId}/upload`, { method: 'POST', body: form })
-  },
-  updateUserStatus: (userId, status) => request(`/chat/users/${userId}/status`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }),
-  // User lists for messaging
-  listDoctors: () => request('/doctors/'),
-  listPatients: () => request('/patients/'),
+  markUrgent: (messageId) => request(`/chat/messages/${messageId}/urgent`, { method: 'PUT' }),
+  setVideoLink: (roomId, link) => request(`/chat/rooms/${roomId}/video-link`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ video_link: link }) }),
+  // Read receipts & unread
+  markRoomRead: (roomId) => request(`/chat/rooms/${roomId}/read`, { method: 'POST' }),
+  getUnreadCounts: () => request('/chat/unread'),
+  // Online status
+  sendHeartbeat: () => request('/chat/online', { method: 'POST' }),
+  goOffline: () => request('/chat/offline', { method: 'POST' }),
+  getOnlineStatus: (userId) => request(`/chat/online/${userId}`),
+  // Typing indicator
+  sendTyping: (roomId) => request(`/chat/rooms/${roomId}/typing`, { method: 'POST' }),
   // Profile
   getProfile: () => request('/profile/me'),
   updateProfile: (data) => request('/profile/me', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
@@ -158,12 +160,20 @@ export const api = {
   getJourney: () => request('/journey/'),
   addJourneyLog: (data) => request('/journey/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
   deleteJourneyLog: (logId) => request(`/journey/${logId}`, { method: 'DELETE' }),
-  // Routine
-  getRoutine: () => request('/routine/'),
-  addRoutineItem: (data) => request('/routine/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
-  deleteRoutineItem: (id) => request(`/routine/${id}`, { method: 'DELETE' }),
-  getCompletions: (date) => request(`/routine/completions?date=${date}`), // date: YYYY-MM-DD
-  checkRoutineItem: (data) => request('/routine/check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
+  // Treatment Plans (replaces Routine)
+  getTreatmentPlans: () => request('/routine/'),
+  getTreatmentSteps: (planId) => request(`/routine/plans/${planId}/steps`),
+  getTreatmentAdherence: (planId, date) => request(`/routine/plans/${planId}/adherence${date ? `?date=${date}` : ''}`),
+  recordAdherence: (planId, data) => request(`/routine/plans/${planId}/adherence`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
+  reportSideEffect: (planId, data) => request(`/routine/plans/${planId}/report-side-effect`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
+  // Doctor: create plans + steps
+  createTreatmentPlan: (data) => request('/routine/plans', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
+  addTreatmentStep: (planId, data) => request(`/routine/plans/${planId}/steps`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
+  // UV Risk (uses backend with Fitzpatrick-aware assessment)
+  getUVRisk: (city) => request(`/recommendations/uv-risk${city ? `?city=${encodeURIComponent(city)}` : ''}`),
+  // Doctor Suggestions
+  addSuggestion: (data) => request('/recommendations/suggest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
+  getSuggestions: (patientId) => request(`/recommendations/suggestions/${patientId}`),
   // Doctor Copilot
   generateClinicalNotes: (roomId) => request('/llm/generate_notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ room_id: roomId }) }),
 }

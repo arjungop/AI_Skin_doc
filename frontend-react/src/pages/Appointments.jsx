@@ -73,16 +73,21 @@ export default function Appointments() {
     setLoading(false)
   }
 
+  const [submitting, setSubmitting] = useState(false)
+
   async function submit(e) {
     e.preventDefault()
     if (!pid) return push('Login required', 'error')
     if (!selectedSlot || !date) return push('Pick a date and slot', 'error')
+    if (submitting) return
+    setSubmitting(true)
     try {
-      const iso = new Date(`${date}T${selectedSlot}:00`).toISOString()
+      const iso = `${date}T${selectedSlot}:00`
       await api.createAppointment({ patient_id: pid, doctor_id: parseInt(doctorId), appointment_date: iso, reason: reason || undefined })
       push('Appointment booked', 'success')
-      setDoctorId(''); setDate(''); setReason(''); load()
+      setDoctorId(''); setDate(''); setReason(''); setSelectedSlot(''); load()
     } catch (err) { push(err.message || 'Booking failed', 'error') }
+    finally { setSubmitting(false) }
   }
 
   return (
@@ -146,6 +151,7 @@ export default function Appointments() {
                       type="date"
                       value={date}
                       onChange={e => setDate(e.target.value)}
+                      min={new Date().toISOString().split('T')[0]}
                       required
                     />
                   </div>
@@ -193,10 +199,11 @@ export default function Appointments() {
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    className="btn-primary px-8 py-3 text-lg"
+                    className="btn-primary px-8 py-3 text-lg disabled:opacity-50"
                     type="submit"
+                    disabled={submitting}
                   >
-                    Confirm Booking <LuArrowRight className="inline ml-2" size={18} />
+                    {submitting ? 'Booking...' : 'Confirm Booking'} {!submitting && <LuArrowRight className="inline ml-2" size={18} />}
                   </motion.button>
                 </div>
               </form>

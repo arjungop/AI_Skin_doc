@@ -112,6 +112,22 @@ export default function DoctorDashboard() {
             </Card>
           </motion.div>
 
+          {/* 6. Treatment Plans Card */}
+          <motion.div variants={item} className="md:col-span-2">
+            <Link to="/doctor/treatment-plans" className="block h-full">
+              <Card className="h-full p-8 flex items-center justify-between group" hover>
+                <div>
+                  <p className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-2">Treatment Plans</p>
+                  <h2 className="text-2xl font-bold text-slate-800 mb-1">Prescribe & Monitor</h2>
+                  <p className="text-slate-500 text-sm">Create plans, add medications, track patient adherence</p>
+                </div>
+                <div className="w-14 h-14 rounded-2xl bg-primary-50 flex items-center justify-center text-primary-500 group-hover:bg-primary-100 transition-colors">
+                  <FaClipboardList size={24} />
+                </div>
+              </Card>
+            </Link>
+          </motion.div>
+
         </div>
       </motion.div>
     </div>

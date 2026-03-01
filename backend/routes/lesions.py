@@ -4,18 +4,19 @@ from backend.database import get_db
 from backend import models, schemas
 from backend.azure_blob import upload_bytes_get_url
 import os
+import asyncio
 from backend.security import get_current_user
-from backend.inference import MelanomaInference
+from backend.inference import get_inference
 from io import BytesIO
 from PIL import Image, ImageStat, ImageFilter, ImageOps, ImageChops
-from datetime import datetime
+from datetime import datetime, timezone
 
 router = APIRouter()
 
 @router.get("/status")
 def model_status():
     from pathlib import Path
-    weights = os.getenv("LESION_MODEL_WEIGHTS", "backend/ml/weights/skin_resnet18.pth")
+    weights = os.getenv("LESION_MODEL_WEIGHTS", "backend/ml/weights/best_model.pth")
     weights_expanded = os.path.expanduser(weights)
     if not os.path.isabs(weights_expanded):
         weights_expanded = str((Path(__file__).resolve().parents[1] / weights_expanded).resolve())
@@ -31,7 +32,7 @@ def model_status():
 
 # Upload & predict (lightweight heuristic model)
 @router.post("/predict", response_model=schemas.LesionOut)
-def predict_lesion(
+async def predict_lesion(
     file: UploadFile = File(...),
     patient_id: int | None = None,
     threshold: float | None = None,
@@ -50,6 +51,18 @@ def predict_lesion(
 
     # Read data once
     data = file.file.read()
+
+    # Strip EXIF metadata from uploaded images for privacy
+    try:
+        _img_exif = Image.open(BytesIO(data))
+        _img_clean = Image.new(_img_exif.mode, _img_exif.size)
+        _img_clean.putdata(list(_img_exif.getdata()))
+        _buf = BytesIO()
+        _fmt = _img_exif.format or "JPEG"
+        _img_clean.save(_buf, format=_fmt)
+        data = _buf.getvalue()
+    except Exception:
+        pass  # If stripping fails, continue with original data
 
     # -------- Basic input validation to reject non-skin images --------
     # You can relax this with LESION_STRICT_VALIDATION=0 in .env
@@ -99,13 +112,15 @@ def predict_lesion(
         raise HTTPException(status_code=400, detail="Could not read image. Please upload a valid photo file.")
 
     # Try learned model first if weights are present; fallback to heuristic
+    use_model = False
     try:
         img = Image.open(BytesIO(data)).convert("RGB")
         model_path = os.getenv("LESION_MODEL_WEIGHTS")
         use_model = model_path and os.path.exists(model_path)
         if use_model:
-            infer = MelanomaInference(weights=model_path)
-            pred = infer.predict_image(img)
+            infer = get_inference(weights=model_path)
+            # Offload blocking ML inference to a thread
+            pred = await asyncio.to_thread(infer.predict_image, img)
             # malignant probability as risk score
             risk = float(pred.get("p_malignant", 0.0))
             # Decide label: allow threshold override if requested or forced via env
@@ -132,15 +147,7 @@ def predict_lesion(
                 prediction = 'malignant' if (risk >= thr or (pred.get('label') == 'malignant')) else 'benign'
             else:
                 prediction = 'malignant' if (pred.get('label') == 'malignant') else 'benign'
-            # Grad-CAM explainability as data URL
-            try:
-                overlay = infer.gradcam_overlay(img)
-                import base64, io
-                buf = io.BytesIO()
-                overlay.save(buf, format='PNG')
-                explain_url = 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode('utf-8')
-            except Exception:
-                explain_url = None
+            explain_url = None  # Grad-CAM not yet implemented for ConvNeXt
         else:
             raise RuntimeError("no-weights")
         # Heuristic fallback
@@ -247,15 +254,9 @@ def predict_lesion(
     db.add(new_lesion)
     db.commit()
     db.refresh(new_lesion)
-    try:
-        setattr(new_lesion, 'risk_score', float(risk))
-        if use_model:
-            try:
-                setattr(new_lesion, 'explain_url', explain_url)
-            except Exception:
-                pass
-    except Exception:
-        pass
+    # Attach transient fields for the response schema (not stored in DB)
+    new_lesion.risk_score = float(risk)
+    new_lesion.explain_url = explain_url if use_model else None
     return new_lesion
 
 
@@ -314,7 +315,7 @@ def create_report(
         prediction=lesion.prediction,
         summary=summary,
         details=details,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     db.add(rep)
     db.commit()

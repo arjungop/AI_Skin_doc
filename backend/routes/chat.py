@@ -1,212 +1,179 @@
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_, or_, desc, func
-from typing import Dict, Set, List, Optional
-import json
-import asyncio
-from datetime import datetime, timedelta
+from sqlalchemy import and_, or_, desc
+from typing import List, Optional
+from datetime import datetime, timezone
 
 from backend.database import get_db
 from backend import models, schemas
-from backend.security import get_current_user, _decode_token
+from backend.security import get_current_user
 from backend.notify import NotificationHub
-
-# Try to import Azure blob function, fallback if not available
-try:
-    from backend.azure_blob import upload_bytes_get_url
-    AZURE_AVAILABLE = True
-except ImportError:
-    AZURE_AVAILABLE = False
-    upload_bytes_get_url = None
 
 router = APIRouter()
 
-# WebSocket connection manager
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: Dict[int, Set[WebSocket]] = {}  # room_id -> set of websockets
-        self.user_connections: Dict[int, WebSocket] = {}  # user_id -> websocket
-        
-    async def connect(self, websocket: WebSocket, room_id: int, user_id: int):
-        await websocket.accept()
-        
-        # Add to room connections
-        if room_id not in self.active_connections:
-            self.active_connections[room_id] = set()
-        self.active_connections[room_id].add(websocket)
-        
-        # Track user connection
-        self.user_connections[user_id] = websocket
-        
-    def disconnect(self, websocket: WebSocket, room_id: int, user_id: int):
-        # Remove from room connections
-        if room_id in self.active_connections:
-            self.active_connections[room_id].discard(websocket)
-            if not self.active_connections[room_id]:
-                del self.active_connections[room_id]
-        
-        # Remove user connection
-        if user_id in self.user_connections and self.user_connections[user_id] == websocket:
-            del self.user_connections[user_id]
-    
-    async def send_to_room(self, room_id: int, message: dict):
-        if room_id in self.active_connections:
-            disconnected = []
-            for connection in list(self.active_connections[room_id]):
-                try:
-                    await connection.send_json(message)
-                except:
-                    disconnected.append(connection)
-            
-            # Clean up disconnected connections
-            for conn in disconnected:
-                self.active_connections[room_id].discard(conn)
-    
-    async def send_to_user(self, user_id: int, message: dict):
-        if user_id in self.user_connections:
-            try:
-                await self.user_connections[user_id].send_json(message)
-            except:
-                del self.user_connections[user_id]
 
-manager = ConnectionManager()
+# ── Helpers ──────────────────────────────────────────────────────────────
 
 def _authorize_room_access(db: Session, user: models.User, room_id: int) -> models.ChatRoom:
-    """Authorize user access to a chat room"""
+    """Authorize user access to a chat room."""
     room = db.query(models.ChatRoom).filter(models.ChatRoom.room_id == room_id).first()
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
-    
+
     role = (user.role or "").upper()
     if role == "ADMIN":
         return room
-    
-    # Check if user is the patient or doctor in this room
+
     patient = db.query(models.Patient).filter(models.Patient.user_id == user.user_id).first()
     doctor = db.query(models.Doctor).filter(models.Doctor.user_id == user.user_id).first()
-    
+
     if patient and room.patient_id == patient.patient_id:
         return room
     if doctor and room.doctor_id == doctor.doctor_id:
         return room
-    
+
     raise HTTPException(status_code=403, detail="Access denied to this chat room")
 
+
 def _get_user_role_and_ids(db: Session, user: models.User):
-    """Get user role and patient/doctor IDs"""
+    """Get user role and patient/doctor entities."""
     role = (user.role or "").upper()
     patient = db.query(models.Patient).filter(models.Patient.user_id == user.user_id).first()
     doctor = db.query(models.Doctor).filter(models.Doctor.user_id == user.user_id).first()
-    
     return role, patient, doctor
 
-def _populate_room_data(room: models.ChatRoom, db: Session):
-    """Populate room with additional data"""
-    # Get patient and doctor info
-    patient = db.query(models.Patient).options(
-        joinedload(models.Patient.user)
-    ).filter(models.Patient.patient_id == room.patient_id).first()
-    
-    doctor = db.query(models.Doctor).options(
-        joinedload(models.Doctor.user)
-    ).filter(models.Doctor.doctor_id == room.doctor_id).first()
-    
-    # Get last message
+
+def _audit(db: Session, user_id: int, action: str, meta: str = ""):
+    """Write an entry to the audit log."""
+    log = models.AuditLog(user_id=user_id, action=action, meta=meta[:4000])
+    db.add(log)
+    # committed by the caller together with the main transaction
+
+
+def _populate_room_data(room: models.ChatRoom, db: Session, *, prefetched_patients=None, prefetched_doctors=None) -> dict:
+    """Build a dict representation of a room with participant info.
+    Uses prefetched maps when available to avoid N+1 queries."""
+    if prefetched_patients and room.patient_id in prefetched_patients:
+        patient = prefetched_patients[room.patient_id]
+    else:
+        patient = db.query(models.Patient).options(
+            joinedload(models.Patient.user)
+        ).filter(models.Patient.patient_id == room.patient_id).first()
+
+    if prefetched_doctors and room.doctor_id in prefetched_doctors:
+        doctor = prefetched_doctors[room.doctor_id]
+    else:
+        doctor = db.query(models.Doctor).options(
+            joinedload(models.Doctor.user)
+        ).filter(models.Doctor.doctor_id == room.doctor_id).first()
+
     last_message = db.query(models.Message).filter(
         models.Message.room_id == room.room_id,
-        models.Message.is_deleted == False
+        models.Message.is_deleted == False,
     ).order_by(desc(models.Message.created_at)).first()
-    
-    room_data = {
+
+    return {
         "room_id": room.room_id,
         "patient_id": room.patient_id,
         "doctor_id": room.doctor_id,
         "created_at": room.created_at,
         "last_message_at": room.last_message_at,
         "is_active": room.is_active,
-        "unread_count_patient": room.unread_count_patient,
-        "unread_count_doctor": room.unread_count_doctor,
+        "video_link": getattr(room, 'video_link', None),
+        "unread_count_patient": getattr(room, 'unread_count_patient', 0),
+        "unread_count_doctor": getattr(room, 'unread_count_doctor', 0),
         "patient": {
             "patient_id": patient.patient_id,
+            "user_id": patient.user.user_id if patient.user else None,
             "first_name": patient.first_name,
             "last_name": patient.last_name,
-            "username": patient.user.username
+            "username": patient.user.username if patient.user else f"patient_{patient.patient_id}",
         } if patient else None,
         "doctor": {
             "doctor_id": doctor.doctor_id,
-            "username": doctor.user.username,
-            "specialization": doctor.specialization
+            "user_id": doctor.user.user_id if doctor.user else None,
+            "username": doctor.user.username if doctor.user else f"doctor_{doctor.doctor_id}",
+            "first_name": getattr(doctor, 'first_name', None) or (doctor.user.username if doctor.user else f"Doctor {doctor.doctor_id}"),
+            "last_name": getattr(doctor, 'last_name', None) or '',
+            "specialization": doctor.specialization,
         } if doctor else None,
         "last_message": {
-            "content": last_message.content[:50] + "..." if last_message and len(last_message.content or "") > 50 else last_message.content,
+            "content": (last_message.content[:50] + "...")
+                       if last_message and len(last_message.content or "") > 50
+                       else (last_message.content if last_message else None),
             "created_at": last_message.created_at,
-            "sender_user_id": last_message.sender_user_id
-        } if last_message else None
+            "sender_user_id": last_message.sender_user_id,
+            "is_urgent": getattr(last_message, 'is_urgent', False),
+        } if last_message else None,
     }
-    
-    return room_data
 
-def _populate_message_data(message: models.Message, db: Session):
-    """Populate message with additional data"""
-    # Get sender info
-    sender = db.query(models.User).filter(models.User.user_id == message.sender_user_id).first()
-    
-    # Get reply to message if exists
+
+def _populate_message_data(message: models.Message, db: Session, *, prefetched_users=None, prefetched_replies=None) -> dict:
+    """Build a dict representation of a single message."""
+    if prefetched_users and message.sender_user_id in prefetched_users:
+        sender = prefetched_users[message.sender_user_id]
+    else:
+        sender = db.query(models.User).filter(
+            models.User.user_id == message.sender_user_id
+        ).first()
+
     reply_to = None
     if message.reply_to_message_id:
-        reply_msg = db.query(models.Message).filter(models.Message.message_id == message.reply_to_message_id).first()
+        if prefetched_replies and message.reply_to_message_id in prefetched_replies:
+            reply_msg = prefetched_replies[message.reply_to_message_id]
+        else:
+            reply_msg = db.query(models.Message).filter(
+                models.Message.message_id == message.reply_to_message_id
+            ).first()
         if reply_msg:
-            reply_sender = db.query(models.User).filter(models.User.user_id == reply_msg.sender_user_id).first()
+            if prefetched_users and reply_msg.sender_user_id in prefetched_users:
+                reply_sender = prefetched_users[reply_msg.sender_user_id]
+            else:
+                reply_sender = db.query(models.User).filter(
+                    models.User.user_id == reply_msg.sender_user_id
+                ).first()
             reply_to = {
                 "message_id": reply_msg.message_id,
-                "content": reply_msg.content[:100] + "..." if len(reply_msg.content or "") > 100 else reply_msg.content,
-                "sender": {"username": reply_sender.username} if reply_sender else None
+                "content": (reply_msg.content[:100] + "...")
+                           if len(reply_msg.content or "") > 100
+                           else reply_msg.content,
+                "sender": {"username": reply_sender.username} if reply_sender else None,
             }
-    
-    # Get reactions
-    reactions = db.query(models.MessageReaction).options(
-        joinedload(models.MessageReaction.user)
-    ).filter(models.MessageReaction.message_id == message.message_id).all()
-    
-    reactions_data = [
-        {
-            "reaction_id": r.reaction_id,
-            "emoji": r.emoji,
-            "user": {"user_id": r.user.user_id, "username": r.user.username}
-        } for r in reactions
-    ]
-    
+
     return {
         "message_id": message.message_id,
         "room_id": message.room_id,
         "sender_user_id": message.sender_user_id,
         "message_type": message.message_type,
         "content": message.content,
-        "file_url": message.file_url,
-        "file_name": message.file_name,
-        "file_size": message.file_size,
         "reply_to_message_id": message.reply_to_message_id,
         "created_at": message.created_at,
         "updated_at": message.updated_at,
         "status": message.status,
         "is_edited": message.is_edited,
         "is_deleted": message.is_deleted,
+        "is_urgent": getattr(message, 'is_urgent', False),
         "sender": {
             "user_id": sender.user_id,
             "username": sender.username,
-            "role": sender.role
+            "role": sender.role,
         } if sender else None,
         "reply_to": reply_to,
-        "reactions": reactions_data
     }
 
+
+# ── Rooms ────────────────────────────────────────────────────────────────
+
 @router.get("/rooms", response_model=List[dict])
-def list_rooms(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
-    """List all chat rooms for the current user"""
+def list_rooms(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """List all chat rooms for the current user."""
     role, patient, doctor = _get_user_role_and_ids(db, user)
-    
+
     query = db.query(models.ChatRoom).filter(models.ChatRoom.is_active == True)
-    
+
     if role == "ADMIN":
         rooms = query.all()
     elif patient:
@@ -215,67 +182,88 @@ def list_rooms(db: Session = Depends(get_db), user: models.User = Depends(get_cu
         rooms = query.filter(models.ChatRoom.doctor_id == doctor.doctor_id).all()
     else:
         return []
-    
-    # Populate additional data for each room
+
     result = []
-    for room in rooms:
-        room_data = _populate_room_data(room, db)
-        result.append(room_data)
-    
-    # Sort by last message time
-    result.sort(key=lambda x: x["last_message_at"], reverse=True)
+    if rooms:
+        # Batch load patients and doctors to avoid N+1 queries
+        patient_ids = {r.patient_id for r in rooms}
+        doctor_ids = {r.doctor_id for r in rooms}
+        patients_list = db.query(models.Patient).options(joinedload(models.Patient.user)).filter(models.Patient.patient_id.in_(patient_ids)).all()
+        doctors_list = db.query(models.Doctor).options(joinedload(models.Doctor.user)).filter(models.Doctor.doctor_id.in_(doctor_ids)).all()
+        prefetched_patients = {p.patient_id: p for p in patients_list}
+        prefetched_doctors = {d.doctor_id: d for d in doctors_list}
+        result = [_populate_room_data(r, db, prefetched_patients=prefetched_patients, prefetched_doctors=prefetched_doctors) for r in rooms]
+    result.sort(key=lambda x: x["last_message_at"] or datetime.min, reverse=True)
     return result
 
 
 @router.post("/rooms", response_model=dict)
 def create_room(
-    data: schemas.ChatRoomCreate, 
-    db: Session = Depends(get_db), 
-    user: models.User = Depends(get_current_user)
+    data: schemas.ChatRoomCreate,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
 ):
-    """Create a new chat room"""
+    """Create a new chat room."""
     role, patient, doctor = _get_user_role_and_ids(db, user)
-    
-    # Authorization checks
+
     if role != "ADMIN":
         if role == "PATIENT":
             if not patient or patient.patient_id != data.patient_id:
-                raise HTTPException(status_code=403, detail="Cannot create room for another patient")
+                raise HTTPException(403, "Cannot create room for another patient")
         elif role == "DOCTOR":
             if not doctor or doctor.doctor_id != data.doctor_id:
-                raise HTTPException(status_code=403, detail="Cannot create room for another doctor")
+                raise HTTPException(403, "Cannot create room for another doctor")
         else:
-            raise HTTPException(status_code=403, detail="Insufficient permissions")
-    
-    # Check if room already exists
+            raise HTTPException(403, "Insufficient permissions")
+
     existing = db.query(models.ChatRoom).filter(
         models.ChatRoom.patient_id == data.patient_id,
-        models.ChatRoom.doctor_id == data.doctor_id
+        models.ChatRoom.doctor_id == data.doctor_id,
     ).first()
-    
     if existing:
         return _populate_room_data(existing, db)
-    
-    # Create new room
-    room = models.ChatRoom(
-        patient_id=data.patient_id,
-        doctor_id=data.doctor_id
-    )
+
+    room = models.ChatRoom(patient_id=data.patient_id, doctor_id=data.doctor_id)
     db.add(room)
-    db.commit()
-    db.refresh(room)
-    
-    # Send system message
-    system_message = models.Message(
-        room_id=room.room_id,
+
+    system_msg = models.Message(
+        room_id=0,  # placeholder, updated after flush
         sender_user_id=user.user_id,
         message_type=models.MessageType.SYSTEM,
-        content="Chat room created. You can now start messaging!"
+        content="Secure message room created. Messages are logged for HIPAA compliance.",
     )
-    db.add(system_message)
+    db.flush()  # generates room.room_id
+    system_msg.room_id = room.room_id
+    db.add(system_msg)
+
+    _audit(db, user.user_id, "chat_room_created", f"room_id={room.room_id}")
     db.commit()
-    
+
     return _populate_room_data(room, db)
+
+
+@router.put("/rooms/{room_id}/video-link")
+def set_video_link(
+    room_id: int,
+    body: schemas.VideoLinkUpdate,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Set or clear a video consultation link on a room (doctors/admins only)."""
+    room = _authorize_room_access(db, user, room_id)
+    role = (user.role or "").upper()
+
+    if role not in ("DOCTOR", "ADMIN"):
+        raise HTTPException(403, "Only doctors can set video links")
+
+    room.video_link = body.video_link
+    _audit(db, user.user_id, "video_link_set", f"room_id={room_id} link={body.video_link}")
+    db.commit()
+
+    return {"status": "ok", "video_link": room.video_link}
+
+
+# ── Messages ─────────────────────────────────────────────────────────────
 
 @router.get("/rooms/{room_id}/messages")
 def list_messages(
@@ -283,422 +271,392 @@ def list_messages(
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user)
+    user: models.User = Depends(get_current_user),
 ):
-    """List messages in a chat room with pagination"""
+    """List messages with pagination (polling-friendly)."""
     _authorize_room_access(db, user, room_id)
-    
+
     # Mark messages as read for this user
     role, patient, doctor = _get_user_role_and_ids(db, user)
     room = db.query(models.ChatRoom).filter(models.ChatRoom.room_id == room_id).first()
-    
+
     if patient and room.patient_id == patient.patient_id:
         room.unread_count_patient = 0
     elif doctor and room.doctor_id == doctor.doctor_id:
         room.unread_count_doctor = 0
-    
-    db.commit()
-    
-    # Get messages with pagination
-    offset = (page - 1) * limit
-    messages = db.query(models.Message).filter(
+
+    # Mark individual messages from the OTHER user as READ
+    db.query(models.Message).filter(
         models.Message.room_id == room_id,
-        models.Message.is_deleted == False
-    ).order_by(desc(models.Message.created_at)).offset(offset).limit(limit).all()
-    
-    # Reverse to show oldest first
+        models.Message.sender_user_id != user.user_id,
+        models.Message.status != models.MessageStatus.READ,
+        models.Message.is_deleted == False,
+    ).update({"status": models.MessageStatus.READ}, synchronize_session="fetch")
+
+    db.commit()
+
+    offset = (page - 1) * limit
+    messages = (
+        db.query(models.Message)
+        .filter(models.Message.room_id == room_id, models.Message.is_deleted == False)
+        .order_by(desc(models.Message.created_at))
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
     messages.reverse()
-    
-    # Populate message data
-    result = []
-    for message in messages:
-        message_data = _populate_message_data(message, db)
-        result.append(message_data)
-    
+
+    # Batch load users and reply messages to avoid N+1 queries
+    prefetched_users = {}
+    prefetched_replies = {}
+    if messages:
+        sender_ids = {m.sender_user_id for m in messages}
+        reply_ids = {m.reply_to_message_id for m in messages if m.reply_to_message_id}
+        if reply_ids:
+            reply_msgs = db.query(models.Message).filter(models.Message.message_id.in_(reply_ids)).all()
+            prefetched_replies = {rm.message_id: rm for rm in reply_msgs}
+            sender_ids.update(rm.sender_user_id for rm in reply_msgs)
+        users = db.query(models.User).filter(models.User.user_id.in_(sender_ids)).all()
+        prefetched_users = {u.user_id: u for u in users}
+
     return {
-        "messages": result,
+        "messages": [_populate_message_data(m, db, prefetched_users=prefetched_users, prefetched_replies=prefetched_replies) for m in messages],
         "page": page,
         "limit": limit,
         "total": db.query(models.Message).filter(
             models.Message.room_id == room_id,
-            models.Message.is_deleted == False
-        ).count()
+            models.Message.is_deleted == False,
+        ).count(),
     }
 
 
 @router.post("/rooms/{room_id}/messages", response_model=dict)
-async def post_message(
+def post_message(
     room_id: int,
     body: schemas.MessageCreate,
     db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user)
+    user: models.User = Depends(get_current_user),
 ):
-    """Post a new message to a chat room"""
+    """Post a new message to a chat room."""
     room = _authorize_room_access(db, user, room_id)
-    
-    # Validate content
-    if body.message_type == "text" and not (body.content or "").strip():
-        raise HTTPException(status_code=400, detail="Text message cannot be empty")
-    
-    if body.message_type in ["image", "file"] and not body.file_url:
-        raise HTTPException(status_code=400, detail="File URL is required for file messages")
-    
-    # Create message
+
+    if not (body.content or "").strip():
+        raise HTTPException(400, "Message cannot be empty")
+
     message = models.Message(
         room_id=room_id,
         sender_user_id=user.user_id,
-        message_type=body.message_type,
+        message_type=models.MessageType.TEXT,
         content=body.content,
-        file_url=body.file_url,
-        file_name=body.file_name,
-        file_size=body.file_size,
-        reply_to_message_id=body.reply_to_message_id
+        reply_to_message_id=body.reply_to_message_id,
+        is_urgent=body.is_urgent or False,
     )
     db.add(message)
-    
-    # Update room's last message time and unread counts
+
     role, patient, doctor = _get_user_role_and_ids(db, user)
-    room.last_message_at = datetime.utcnow()
-    
+    room.last_message_at = datetime.now(timezone.utc)
+
     if patient and room.patient_id == patient.patient_id:
-        # Patient sent message, increment doctor's unread count
         room.unread_count_doctor += 1
     elif doctor and room.doctor_id == doctor.doctor_id:
-        # Doctor sent message, increment patient's unread count
         room.unread_count_patient += 1
-    
+
+    _audit(db, user.user_id, "message_sent", f"room_id={room_id} urgent={body.is_urgent}")
     db.commit()
     db.refresh(message)
-    
-    # Prepare message data for broadcasting
-    message_data = _populate_message_data(message, db)
-    
-    # Broadcast to room via WebSocket
-    await manager.send_to_room(room_id, {
-        "type": "new_message",
-        "data": message_data
-    })
-    
-    # Send push notification to other participants
+
+    # Push notification to other participant
     try:
-        participants = []
+        notify_ids = []
         if patient and room.patient_id == patient.patient_id:
-            # Message from patient, notify doctor
             doc_user = db.query(models.User).join(models.Doctor).filter(
                 models.Doctor.doctor_id == room.doctor_id
             ).first()
             if doc_user:
-                participants.append(doc_user.user_id)
+                notify_ids.append(doc_user.user_id)
         elif doctor and room.doctor_id == doctor.doctor_id:
-            # Message from doctor, notify patient
             pat_user = db.query(models.User).join(models.Patient).filter(
                 models.Patient.patient_id == room.patient_id
             ).first()
             if pat_user:
-                participants.append(pat_user.user_id)
-        
-        for participant_id in participants:
-            NotificationHub.send_many([participant_id], 'new_message', {
-                'room_id': room_id,
-                'message_id': message.message_id,
-                'sender': user.username,
-                'content': message.content[:100] if message.content else f"Sent a {message.message_type}"
+                notify_ids.append(pat_user.user_id)
+
+        label = "🚨 URGENT: " if message.is_urgent else ""
+        for uid in notify_ids:
+            NotificationHub.send_many([uid], "new_message", {
+                "room_id": room_id,
+                "message_id": message.message_id,
+                "sender": user.username,
+                "content": label + (message.content[:100] if message.content else "New message"),
             })
+            # If recipient has active WebSocket, mark as DELIVERED
+            if uid in NotificationHub.by_user and NotificationHub.by_user[uid]:
+                message.status = models.MessageStatus.DELIVERED
+                db.commit()
     except Exception as e:
-        print(f"Failed to send notification: {e}")
-    
-    return message_data
+        print(f"Notification error: {e}")
+
+    return _populate_message_data(message, db)
+
 
 @router.put("/messages/{message_id}", response_model=dict)
-async def update_message(
+def update_message(
     message_id: int,
     body: schemas.MessageUpdate,
     db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user)
+    user: models.User = Depends(get_current_user),
 ):
-    """Update a message (edit or delete)"""
+    """Edit or soft-delete a message."""
     message = db.query(models.Message).filter(models.Message.message_id == message_id).first()
     if not message:
-        raise HTTPException(status_code=404, detail="Message not found")
-    
-    # Authorization: Only sender can edit/delete their own messages
-    if message.sender_user_id != user.user_id and user.role.upper() != "ADMIN":
-        raise HTTPException(status_code=403, detail="Can only edit your own messages")
-    
-    # Check room access
+        raise HTTPException(404, "Message not found")
+
+    if message.sender_user_id != user.user_id and (user.role or "").upper() != "ADMIN":
+        raise HTTPException(403, "Can only edit your own messages")
+
     _authorize_room_access(db, user, message.room_id)
-    
-    # Update message
+
     if body.content is not None:
         message.content = body.content
         message.is_edited = True
         message.updated_at = datetime.utcnow()
-    
+
     if body.is_deleted is not None:
         message.is_deleted = body.is_deleted
         message.updated_at = datetime.utcnow()
-    
-    db.commit()
-    
-    # Broadcast update to room
-    message_data = _populate_message_data(message, db)
-    await manager.send_to_room(message.room_id, {
-        "type": "message_updated",
-        "data": message_data
-    })
-    
-    return message_data
 
-@router.post("/messages/{message_id}/reactions", response_model=dict)
-async def add_reaction(
+    _audit(db, user.user_id, "message_updated", f"message_id={message_id}")
+    db.commit()
+
+    return _populate_message_data(message, db)
+
+
+@router.put("/messages/{message_id}/urgent")
+def mark_urgent(
     message_id: int,
-    body: schemas.MessageReactionCreate,
     db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user)
+    user: models.User = Depends(get_current_user),
 ):
-    """Add a reaction to a message"""
+    """Toggle the urgent flag on a message."""
     message = db.query(models.Message).filter(models.Message.message_id == message_id).first()
     if not message:
-        raise HTTPException(status_code=404, detail="Message not found")
-    
-    # Check room access
+        raise HTTPException(404, "Message not found")
+
     _authorize_room_access(db, user, message.room_id)
-    
-    # Check if user already reacted with this emoji
-    existing = db.query(models.MessageReaction).filter(
-        models.MessageReaction.message_id == message_id,
-        models.MessageReaction.user_id == user.user_id,
-        models.MessageReaction.emoji == body.emoji
+
+    message.is_urgent = not message.is_urgent
+    message.updated_at = datetime.utcnow()
+
+    _audit(db, user.user_id, "message_urgent_toggled",
+           f"message_id={message_id} is_urgent={message.is_urgent}")
+    db.commit()
+
+    return {"message_id": message_id, "is_urgent": message.is_urgent}
+
+
+# ── Online Status ────────────────────────────────────────────────────────
+
+@router.post("/online")
+def heartbeat(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Update user online status (heartbeat). Call every ~30s from frontend."""
+    status_row = db.query(models.UserOnlineStatus).filter(
+        models.UserOnlineStatus.user_id == user.user_id
     ).first()
-    
-    if existing:
-        # Remove reaction if it exists
-        db.delete(existing)
-        db.commit()
-        action = "removed"
+    now = datetime.now(timezone.utc)
+    if status_row:
+        status_row.status = models.OnlineStatus.ONLINE
+        status_row.last_seen = now
+        status_row.last_activity = now
     else:
-        # Add new reaction
-        reaction = models.MessageReaction(
-            message_id=message_id,
+        status_row = models.UserOnlineStatus(
             user_id=user.user_id,
-            emoji=body.emoji
+            status=models.OnlineStatus.ONLINE,
+            last_seen=now,
+            last_activity=now,
         )
-        db.add(reaction)
+        db.add(status_row)
+    db.commit()
+    return {"status": "online"}
+
+
+@router.post("/offline")
+def go_offline(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Mark user as offline (called on logout/tab close)."""
+    status_row = db.query(models.UserOnlineStatus).filter(
+        models.UserOnlineStatus.user_id == user.user_id
+    ).first()
+    if status_row:
+        status_row.status = models.OnlineStatus.OFFLINE
+        status_row.last_seen = datetime.now(timezone.utc)
         db.commit()
-        action = "added"
-    
-    # Broadcast reaction update
-    message_data = _populate_message_data(message, db)
-    await manager.send_to_room(message.room_id, {
-        "type": "reaction_updated",
-        "data": message_data
-    })
-    
-    return {"status": action, "emoji": body.emoji}
+    return {"status": "offline"}
 
-@router.post("/rooms/{room_id}/upload", response_model=dict)
-async def upload_file(
-    room_id: int,
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user)
-):
-    """Upload a file to a chat room"""
-    _authorize_room_access(db, user, room_id)
-    
-    # Validate file
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="No file provided")
-    
-    max_size = 10 * 1024 * 1024  # 10MB
-    file_content = await file.read()
-    if len(file_content) > max_size:
-        raise HTTPException(status_code=400, detail="File too large (max 10MB)")
-    
-    try:
-        # Upload to Azure Blob Storage
-        if AZURE_AVAILABLE and upload_bytes_get_url:
-            file_url = await upload_bytes_get_url(file_content, file.filename, "chat-files")
-        else:
-            # Fallback to local storage or skip file upload
-            file_url = f"local://chat-files/{file.filename}"
-        
-        # Determine message type
-        message_type = "image" if file.content_type and file.content_type.startswith("image/") else "file"
-        
-        return {
-            "file_url": file_url,
-            "file_name": file.filename,
-            "file_size": len(file_content),
-            "message_type": message_type
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
-@router.put("/users/{user_id}/status")
-async def update_online_status(
+@router.get("/online/{user_id}")
+def get_online_status(
     user_id: int,
-    status: str,
     db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user)
+    user: models.User = Depends(get_current_user),
 ):
-    """Update user's online status"""
-    if user.user_id != user_id and user.role.upper() != "ADMIN":
-        raise HTTPException(status_code=403, detail="Can only update your own status")
-    
-    # Update or create status
-    user_status = db.query(models.UserOnlineStatus).filter(
+    """Get the online status of another user."""
+    status_row = db.query(models.UserOnlineStatus).filter(
         models.UserOnlineStatus.user_id == user_id
     ).first()
-    
-    if user_status:
-        user_status.status = status
-        user_status.last_activity = datetime.utcnow()
-        if status == "offline":
-            user_status.last_seen = datetime.utcnow()
-    else:
-        user_status = models.UserOnlineStatus(
-            user_id=user_id,
-            status=status,
-            last_activity=datetime.utcnow(),
-            last_seen=datetime.utcnow() if status == "offline" else None
-        )
-        db.add(user_status)
-    
-    db.commit()
-    
-    # Broadcast status update to relevant rooms
-    rooms = db.query(models.ChatRoom).filter(
-        or_(
-            models.ChatRoom.patient_id.in_(
-                db.query(models.Patient.patient_id).filter(models.Patient.user_id == user_id)
-            ),
-            models.ChatRoom.doctor_id.in_(
-                db.query(models.Doctor.doctor_id).filter(models.Doctor.user_id == user_id)
-            )
-        )
-    ).all()
-    
-    for room in rooms:
-        await manager.send_to_room(room.room_id, {
-            "type": "user_status_updated",
-            "data": {
-                "user_id": user_id,
-                "status": status,
-                "last_activity": user_status.last_activity.isoformat()
-            }
-        })
-    
-    return {"status": "updated"}
+    if not status_row:
+        return {"user_id": user_id, "status": "offline", "last_seen": None}
 
-@router.websocket("/ws")
-async def websocket_endpoint(
-    websocket: WebSocket,
-    room_id: int = Query(...),
-    token: str = Query(""),
-    db: Session = Depends(get_db)
-):
-    """WebSocket endpoint for real-time messaging"""
-    # Authenticate user
-    try:
-        payload = _decode_token(token)
-        user_id = int(payload.get("sub", 0))
-    except Exception:
-        await websocket.close(code=4001, reason="Invalid token")
-        return
-    
-    user = db.query(models.User).filter(models.User.user_id == user_id).first()
-    if not user:
-        await websocket.close(code=4001, reason="User not found")
-        return
-    
-    # Authorize room access
-    try:
-        _authorize_room_access(db, user, room_id)
-    except HTTPException:
-        await websocket.close(code=4003, reason="Access denied")
-        return
-    
-    # Connect to room
-    await manager.connect(websocket, room_id, user_id)
-    
-    # Update user status to online
-    try:
-        await update_online_status(user_id, "online", db, user)
-    except:
-        pass
-    
-    try:
-        while True:
-            # Receive message from client
-            data = await websocket.receive_json()
-            
-            # Handle different message types
-            if data.get("type") == "ping":
-                await websocket.send_json({"type": "pong"})
-                continue
-            
-            if data.get("type") == "typing":
-                # Broadcast typing indicator
-                await manager.send_to_room(room_id, {
-                    "type": "typing",
-                    "data": {
-                        "user_id": user_id,
-                        "username": user.username,
-                        "typing": data.get("typing", False)
-                    }
-                })
-                continue
-            
-            # Handle regular message
-            content = (data.get("content") or "").strip()
-            message_type = data.get("message_type", "text")
-            
-            if message_type == "text" and not content:
-                continue
-            
-            # Create message
-            message = models.Message(
-                room_id=room_id,
-                sender_user_id=user_id,
-                message_type=message_type,
-                content=content,
-                file_url=data.get("file_url"),
-                file_name=data.get("file_name"),
-                file_size=data.get("file_size"),
-                reply_to_message_id=data.get("reply_to_message_id")
-            )
-            db.add(message)
-            
-            # Update room
-            room = db.query(models.ChatRoom).filter(models.ChatRoom.room_id == room_id).first()
-            room.last_message_at = datetime.utcnow()
-            
-            # Update unread counts
-            role, patient, doctor = _get_user_role_and_ids(db, user)
-            if patient and room.patient_id == patient.patient_id:
-                room.unread_count_doctor += 1
-            elif doctor and room.doctor_id == doctor.doctor_id:
-                room.unread_count_patient += 1
-            
+    # Auto-degrade to offline if heartbeat too old (>2 min)
+    now = datetime.now(timezone.utc)
+    last_seen = status_row.last_seen
+    if last_seen and last_seen.tzinfo is None:
+        last_seen = last_seen.replace(tzinfo=timezone.utc)
+    if status_row.status == models.OnlineStatus.ONLINE and last_seen:
+        diff = (now - last_seen).total_seconds()
+        if diff > 120:
+            status_row.status = models.OnlineStatus.OFFLINE
             db.commit()
-            db.refresh(message)
-            
-            # Broadcast message
-            message_data = _populate_message_data(message, db)
-            await manager.send_to_room(room_id, {
-                "type": "new_message",
-                "data": message_data
+
+    return {
+        "user_id": user_id,
+        "status": status_row.status.value if status_row.status else "offline",
+        "last_seen": status_row.last_seen,
+    }
+
+
+# ── Read Receipts ────────────────────────────────────────────────────────
+
+@router.post("/rooms/{room_id}/read")
+def mark_room_read(
+    room_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Mark all messages in a room as read for the current user and reset unread counter."""
+    room = _authorize_room_access(db, user, room_id)
+    role, patient, doctor = _get_user_role_and_ids(db, user)
+
+    # Reset unread counter
+    if patient and room.patient_id == patient.patient_id:
+        room.unread_count_patient = 0
+    elif doctor and room.doctor_id == doctor.doctor_id:
+        room.unread_count_doctor = 0
+    elif role == "ADMIN":
+        room.unread_count_patient = 0
+        room.unread_count_doctor = 0
+
+    # Mark unread messages as READ
+    unread_msgs = db.query(models.Message).filter(
+        models.Message.room_id == room_id,
+        models.Message.sender_user_id != user.user_id,
+        models.Message.status != models.MessageStatus.READ,
+        models.Message.is_deleted == False,
+    ).all()
+
+    for msg in unread_msgs:
+        msg.status = models.MessageStatus.READ
+
+    db.commit()
+
+    # Notify the other participant about read receipt
+    try:
+        notify_target = None
+        if patient and room.patient_id == patient.patient_id:
+            doc = db.query(models.Doctor).filter(models.Doctor.doctor_id == room.doctor_id).first()
+            if doc:
+                doc_user = db.query(models.User).filter(models.User.user_id == doc.user_id).first()
+                if doc_user:
+                    notify_target = doc_user.user_id
+        elif doctor and room.doctor_id == doctor.doctor_id:
+            pat = db.query(models.Patient).filter(models.Patient.patient_id == room.patient_id).first()
+            if pat:
+                notify_target = pat.user_id
+
+        if notify_target:
+            NotificationHub.send(notify_target, "messages_read", {
+                "room_id": room_id,
+                "reader_user_id": user.user_id,
             })
-            
-    except WebSocketDisconnect:
+    except Exception:
         pass
-    except Exception as e:
-        print(f"WebSocket error: {e}")
-    finally:
-        # Disconnect and update status
-        manager.disconnect(websocket, room_id, user_id)
-        try:
-            await update_online_status(user_id, "offline", db, user)
-        except:
-            pass
+
+    return {"status": "ok", "marked_read": len(unread_msgs)}
+
+
+# ── Unread Counts (Global) ──────────────────────────────────────────────
+
+@router.get("/unread")
+def get_unread_counts(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Get total unread message count for the current user across all rooms."""
+    role, patient, doctor = _get_user_role_and_ids(db, user)
+
+    rooms = db.query(models.ChatRoom).filter(models.ChatRoom.is_active == True)
+
+    total_unread = 0
+    room_unreads = []
+
+    if role == "ADMIN":
+        for room in rooms.all():
+            unread = max(getattr(room, 'unread_count_patient', 0), getattr(room, 'unread_count_doctor', 0))
+            if unread > 0:
+                room_unreads.append({"room_id": room.room_id, "unread": unread})
+            total_unread += unread
+    elif patient:
+        for room in rooms.filter(models.ChatRoom.patient_id == patient.patient_id).all():
+            unread = getattr(room, 'unread_count_patient', 0)
+            if unread > 0:
+                room_unreads.append({"room_id": room.room_id, "unread": unread})
+            total_unread += unread
+    elif doctor:
+        for room in rooms.filter(models.ChatRoom.doctor_id == doctor.doctor_id).all():
+            unread = getattr(room, 'unread_count_doctor', 0)
+            if unread > 0:
+                room_unreads.append({"room_id": room.room_id, "unread": unread})
+            total_unread += unread
+
+    return {"total_unread": total_unread, "rooms": room_unreads}
+
+
+# ── Typing Indicator ─────────────────────────────────────────────────────
+
+@router.post("/rooms/{room_id}/typing")
+def send_typing(
+    room_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Broadcast a typing indicator to the other participant via WebSocket."""
+    room = _authorize_room_access(db, user, room_id)
+    role, patient, doctor = _get_user_role_and_ids(db, user)
+
+    try:
+        notify_target = None
+        if patient and room.patient_id == patient.patient_id:
+            doc = db.query(models.Doctor).filter(models.Doctor.doctor_id == room.doctor_id).first()
+            if doc:
+                doc_user = db.query(models.User).filter(models.User.user_id == doc.user_id).first()
+                if doc_user:
+                    notify_target = doc_user.user_id
+        elif doctor and room.doctor_id == doctor.doctor_id:
+            pat = db.query(models.Patient).filter(models.Patient.patient_id == room.patient_id).first()
+            if pat:
+                notify_target = pat.user_id
+
+        if notify_target:
+            NotificationHub.send(notify_target, "typing", {
+                "room_id": room_id,
+                "user_id": user.user_id,
+                "username": user.username,
+            })
+    except Exception:
+        pass
+
+    return {"status": "ok"}

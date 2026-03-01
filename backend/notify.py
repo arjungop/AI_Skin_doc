@@ -1,5 +1,6 @@
 from typing import Dict, Set
 from fastapi import WebSocket
+import asyncio
 
 
 class NotificationHub:
@@ -19,17 +20,27 @@ class NotificationHub:
             pass
 
     @classmethod
-    def send(cls, user_id: int, event: str, payload: dict):
+    async def _async_send(cls, user_id: int, event: str, payload: dict):
         data = {"event": event, **payload}
         for ws in list(cls.by_user.get(user_id, set())):
             try:
-                ws.send_json(data)
+                await ws.send_json(data)
             except Exception:
                 try:
-                    ws.close()
+                    await ws.close()
                 except Exception:
                     pass
                 cls.unregister(user_id, ws)
+
+    @classmethod
+    def send(cls, user_id: int, event: str, payload: dict):
+        """Send notification — works from both sync and async contexts."""
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(cls._async_send(user_id, event, payload))
+        except RuntimeError:
+            # No running event loop — skip (shouldn't happen in FastAPI)
+            pass
 
     @classmethod
     def send_many(cls, user_ids: Set[int] | list[int], event: str, payload: dict):

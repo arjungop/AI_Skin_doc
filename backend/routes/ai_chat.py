@@ -54,6 +54,10 @@ def add_message(session_id: int, body: schemas.AIChatMessageIn, db: Session = De
     sess = db.query(models.AIChatSession).filter(models.AIChatSession.session_id == session_id, models.AIChatSession.user_id == user.user_id).first()
     if not sess:
         raise HTTPException(status_code=404, detail="Not found")
+    # Block system role injection — users can only post as 'user' or 'assistant'
+    allowed_roles = {"user", "assistant"}
+    if (body.role or "").lower() not in allowed_roles:
+        raise HTTPException(status_code=400, detail="Invalid role. Allowed: user, assistant")
     m = models.AIChatMessage(session_id=session_id, role=body.role, content=body.content)
     db.add(m); db.commit(); db.refresh(m)
     return m

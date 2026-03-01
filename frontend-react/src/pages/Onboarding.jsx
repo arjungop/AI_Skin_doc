@@ -18,16 +18,41 @@ const STEPS = [
 export default function Onboarding() {
     const navigate = useNavigate()
     const [step, setStep] = useState(0)
-    const [data, setData] = useState({
-        age_range: '', gender: '', skin_type: '', sensitivity: '',
-        concerns: [], sun_exposure: '', sunscreen: '',
-        smoke: false, cancer_history: false, mole_check: false, location_city: ''
+    const [data, setData] = useState(() => {
+        try {
+            const saved = sessionStorage.getItem('onboarding_data')
+            if (saved) return JSON.parse(saved)
+        } catch {}
+        return {
+            age_range: '', gender: '', skin_type: '', sensitivity: '',
+            concerns: [], sun_exposure: '', sunscreen: '',
+            smoke: false, cancer_history: false, mole_check: false, location_city: ''
+        }
     })
     const [loading, setLoading] = useState(false)
 
+    // Persist form data to sessionStorage for recovery on refresh
+    useEffect(() => {
+        try { sessionStorage.setItem('onboarding_data', JSON.stringify(data)) } catch {}
+    }, [data])
+
+    const [validationError, setValidationError] = useState('')
+
     const handleNext = () => {
+        setValidationError('')
+        // Per-step validation
+        if (step === 0 && !data.age_range) { setValidationError('Please select your age range'); return }
+        if (step === 1 && (!data.skin_type || !data.sensitivity)) { setValidationError('Please select both skin type and sensitivity level'); return }
+        if (step === 2 && data.concerns.length === 0) { setValidationError('Please select at least one concern'); return }
+        if (step === 3 && (!data.sun_exposure || !data.sunscreen)) { setValidationError('Please complete sun exposure and sunscreen fields'); return }
+        // Steps 4 (medical safety) and 5 (location) are optional
         if (step < STEPS.length - 1) setStep(step + 1)
         else submit()
+    }
+
+    const handleBack = () => {
+        setValidationError('')
+        if (step > 0) setStep(step - 1)
     }
 
     const submit = async () => {
@@ -50,7 +75,8 @@ export default function Onboarding() {
             localStorage.setItem('onboarding_complete', 'true')
 
             await api.updateProfile(payload)
-            window.location.href = '/dashboard'
+            try { sessionStorage.removeItem('onboarding_data') } catch {}
+            navigate('/dashboard')
         } catch (err) {
             console.error(err); setLoading(false)
         }
@@ -262,8 +288,23 @@ export default function Onboarding() {
                         </AnimatePresence>
                     </div>
 
+                    {/* Validation Error */}
+                    {validationError && (
+                        <div className="mt-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-sm font-medium text-center" role="alert">
+                            {validationError}
+                        </div>
+                    )}
+
                     {/* Footer Controls */}
-                    <div className="mt-10 pt-6 border-t border-slate-100 flex justify-end">
+                    <div className="mt-10 pt-6 border-t border-slate-100 flex justify-between">
+                        {step > 0 ? (
+                            <button
+                                onClick={handleBack}
+                                className="px-6 py-3 text-slate-500 hover:text-slate-900 font-medium transition-colors"
+                            >
+                                Back
+                            </button>
+                        ) : <div />}
                         <button
                             onClick={handleNext}
                             disabled={loading}

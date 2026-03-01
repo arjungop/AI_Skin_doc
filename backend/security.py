@@ -16,12 +16,17 @@ from .database import get_db
 from . import models
 
 
-JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change")
+JWT_SECRET = os.getenv("JWT_SECRET", "")
+if not JWT_SECRET:
+    import warnings
+    warnings.warn(
+        "JWT_SECRET is not set! Using an insecure default for LOCAL DEV ONLY.",
+        stacklevel=2,
+    )
+    JWT_SECRET = "dev-secret-change-me-in-production"
 JWT_ALG = os.getenv("JWT_ALG", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "120"))
 JWT_LEEWAY_SECONDS = int(os.getenv("JWT_LEEWAY_SECONDS", "300"))  # tolerate small clock drift
-JWT_IGNORE_EXP = os.getenv("JWT_IGNORE_EXP", "0") in {"1", "true", "TRUE", "yes", "on"}
-JWT_IGNORE_SIGNATURE = os.getenv("JWT_IGNORE_SIGNATURE", "0") in {"1", "true", "TRUE", "yes", "on"}
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -42,26 +47,19 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
 
 def _decode_token(token: str) -> Dict[str, Any]:
     try:
-        # Optionally bypass signature verification in dev
-        if JWT_IGNORE_SIGNATURE:
-            try:
-                payload = jwt.get_unverified_claims(token)
-            except Exception as e:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token") from e
-        else:
-            # Verify signature; handle exp separately for leeway and disable aud/iss checks
-            payload = jwt.decode(
-                token,
-                JWT_SECRET,
-                algorithms=[JWT_ALG],
-                options={
-                    "verify_exp": False,
-                    "verify_aud": False,
-                    "verify_iss": False,
-                },
-            )
+        # Always verify signature — no bypass allowed
+        payload = jwt.decode(
+            token,
+            JWT_SECRET,
+            algorithms=[JWT_ALG],
+            options={
+                "verify_exp": False,
+                "verify_aud": False,
+                "verify_iss": False,
+            },
+        )
         exp = payload.get("exp")
-        if not JWT_IGNORE_EXP and exp is not None:
+        if exp is not None:
             exp_ts: float
             if isinstance(exp, (int, float)):
                 exp_ts = float(exp)

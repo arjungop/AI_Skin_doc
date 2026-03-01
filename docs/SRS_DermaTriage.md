@@ -708,12 +708,14 @@ This is a standalone system with file-based input/output. Future versions may in
 - Use Cases U2, U3 (Training pipeline use cases)
 - Section 4.1 (Performance Requirements)
 - Coordination of team activities and document assembly
+- Backend development (FastAPI, database, and inference services)
 
 **Suryansh Ram Menon:**
 - Section 3.1, 3.2 (External Interfaces and Functional Requirements)
 - Use Cases U1, U6 (Dataset preparation, batch processing)
 - Section 4.2 (Safety and Security Requirements)
 - Implementation of download scripts and dataset consolidation
+- Frontend development (React UI, dashboard components, and API integration)
 
 **Divagar:**
 - Use Cases U4, U5 (Inference and explainability)

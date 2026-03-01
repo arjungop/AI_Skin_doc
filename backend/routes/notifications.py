@@ -8,15 +8,23 @@ router = APIRouter()
 
 
 @router.websocket("/notifications/ws")
-async def notifications_ws(websocket: WebSocket, token: str = Query(""), db: Session = Depends(get_db)):
+async def notifications_ws(websocket: WebSocket, token: str = Query("")):
     from backend.security import _decode_token  # type: ignore
+    from backend.database import SessionLocal
     try:
         payload = _decode_token(token)
         user_id = int(payload.get("sub", 0))
     except Exception:
         await websocket.close(code=4401)
         return
-    user = db.query(models.User).filter(models.User.user_id == user_id).first()
+
+    # Use a short-lived DB session for auth only, then close it
+    db = SessionLocal()
+    try:
+        user = db.query(models.User).filter(models.User.user_id == user_id).first()
+    finally:
+        db.close()
+
     if not user:
         await websocket.close(code=4401)
         return

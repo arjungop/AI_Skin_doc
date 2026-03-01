@@ -8,6 +8,7 @@ from typing import List, Dict, Optional
 from backend.llm_service import chat_reply, diagnosis_for_lesion, stream_chat_reply
 from backend.llm_service import _provider  # type: ignore
 from fastapi.responses import StreamingResponse
+from backend.security import get_current_user, require_roles
 
 router = APIRouter()
 
@@ -24,9 +25,15 @@ class ChatRequest(BaseModel):
 
 
 @router.post("/chat")
-def chat(req: ChatRequest, db: Session = Depends(get_db)):
+def chat(req: ChatRequest, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
     patient_dict = None
     if req.patient_id:
+        # Ownership check: patients can only query their own data
+        role = (user.role or "").upper()
+        if role == "PATIENT":
+            patient_self = db.query(models.Patient).filter(models.Patient.user_id == user.user_id).first()
+            if not patient_self or patient_self.patient_id != req.patient_id:
+                raise HTTPException(status_code=403, detail="Cannot access another patient's data")
         patient = db.query(models.Patient).filter(models.Patient.patient_id == req.patient_id).first()
         if not patient:
             raise HTTPException(status_code=404, detail="Patient not found")
@@ -58,7 +65,13 @@ class DiagnoseRequest(BaseModel):
 
 
 @router.post("/diagnose")
-def diagnose(req: DiagnoseRequest, db: Session = Depends(get_db)):
+def diagnose(req: DiagnoseRequest, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    # Ownership check
+    role = (user.role or "").upper()
+    if role == "PATIENT":
+        patient_self = db.query(models.Patient).filter(models.Patient.user_id == user.user_id).first()
+        if not patient_self or patient_self.patient_id != req.patient_id:
+            raise HTTPException(status_code=403, detail="Cannot access another patient's data")
     patient = db.query(models.Patient).filter(models.Patient.patient_id == req.patient_id).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
@@ -79,7 +92,7 @@ def diagnose(req: DiagnoseRequest, db: Session = Depends(get_db)):
     result = diagnosis_for_lesion(patient_dict, lesion_dict)
     return {"diagnosis": result}
 @router.get("/status")
-def status():
+def status(user: models.User = Depends(get_current_user)):
     prov = _provider() or "fallback"
     details = {"provider": prov}
     missing: list[str] = []
@@ -109,9 +122,15 @@ def status():
 
 
 @router.post("/chat_stream")
-def chat_stream(req: ChatRequest, db: Session = Depends(get_db)):
+def chat_stream(req: ChatRequest, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
     patient_dict = None
     if req.patient_id:
+        # Ownership check
+        role = (user.role or "").upper()
+        if role == "PATIENT":
+            patient_self = db.query(models.Patient).filter(models.Patient.user_id == user.user_id).first()
+            if not patient_self or patient_self.patient_id != req.patient_id:
+                raise HTTPException(status_code=403, detail="Cannot access another patient's data")
         patient = db.query(models.Patient).filter(models.Patient.patient_id == req.patient_id).first()
         if patient:
             patient_dict = {
@@ -138,7 +157,7 @@ class NoteGenerationRequest(BaseModel):
     room_id: int
 
 @router.post("/generate_notes")
-def generate_notes(req: NoteGenerationRequest, db: Session = Depends(get_db)):
+def generate_notes(req: NoteGenerationRequest, db: Session = Depends(get_db), user: models.User = Depends(require_roles("DOCTOR", "ADMIN"))):
     room = db.query(models.ChatRoom).filter(models.ChatRoom.room_id == req.room_id).first()
     if not room:
         raise HTTPException(status_code=404, detail="Chat room not found")
