@@ -1,4 +1,5 @@
 # Fine-tuning dependencies (in addition to requirements.txt)
+kaggle>=1.6.0           # Kaggle CLI — for PAD-UFES-20 auto-download
 datasets>=2.18.0        # HuggingFace datasets — for Fitzpatrick17k download
 huggingface-hub>=0.22.0 # HuggingFace Hub — for checkpoint auto-download
 tqdm>=4.66.0

@@ -3,11 +3,14 @@
 # Smartphone Fine-tuning Runner
 # Run this on Jarvis Labs (RTX 6000 Ada) — estimated time: ~35 minutes
 #
-# BEFORE running, place PAD-UFES-20 dataset manually:
-#   1. Download from: https://www.kaggle.com/datasets/andrewmvd/pad-ufes-20
-#   2. Unzip into:    jarvis-training/finetune_data/pad_ufes_20/
-#      So you have:   finetune_data/pad_ufes_20/metadata.csv
-#                     finetune_data/pad_ufes_20/*.png
+# FIRST TIME SETUP — Kaggle credentials (one-time):
+#   1. Go to https://www.kaggle.com/settings → API → "Create New Token"
+#      → downloads kaggle.json
+#   2. Run on this machine:
+#        mkdir -p ~/.kaggle
+#        mv /path/to/kaggle.json ~/.kaggle/kaggle.json
+#        chmod 600 ~/.kaggle/kaggle.json
+#   Then run this script — PAD-UFES-20 will download automatically (~1GB).
 # ─────────────────────────────────────────────────────────────────────────────
 set -e
 
@@ -17,21 +20,25 @@ echo "======================================="
 echo "  Skin-Doc Smartphone Fine-tuning"
 echo "======================================="
 echo ""
-echo "Checking for PAD-UFES-20 dataset..."
-if [ ! -f "finetune_data/pad_ufes_20/metadata.csv" ]; then
+
+# Install dependencies (includes kaggle CLI)
+pip install -q -r requirements_finetune.txt
+
+# Check kaggle credentials
+if [ ! -f "$HOME/.kaggle/kaggle.json" ]; then
   echo ""
-  echo "ERROR: PAD-UFES-20 not found!"
-  echo "  Download from: https://www.kaggle.com/datasets/andrewmvd/pad-ufes-20"
-  echo "  Unzip into: $(pwd)/finetune_data/pad_ufes_20/"
-  echo "  Required:   finetune_data/pad_ufes_20/metadata.csv"
+  echo "ERROR: Kaggle credentials not found at ~/.kaggle/kaggle.json"
+  echo ""
+  echo "  1. Go to https://www.kaggle.com/settings"
+  echo "  2. Click API -> 'Create New Token' -> downloads kaggle.json"
+  echo "  3. Run:"
+  echo "       mkdir -p ~/.kaggle"
+  echo "       mv /path/to/kaggle.json ~/.kaggle/kaggle.json"
+  echo "       chmod 600 ~/.kaggle/kaggle.json"
+  echo "  4. Re-run this script."
   echo ""
   exit 1
 fi
-echo "  Found PAD-UFES-20 dataset."
-echo ""
-
-# Install dependencies
-pip install -q -r requirements_finetune.txt
 
 # Run fine-tuning
 # Checkpoint is auto-downloaded from HuggingFace (arjg/skin-doc-model)

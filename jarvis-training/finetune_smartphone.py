@@ -190,31 +190,63 @@ def download_with_progress(url: str, dest: Path, desc: str = ""):
 
 def download_padufes(data_dir: Path) -> Path:
     """
-    Expects PAD-UFES-20 to be placed manually (download from Kaggle).
-    Place the dataset at:  finetune_data/pad_ufes_20/
-      - finetune_data/pad_ufes_20/metadata.csv
-      - finetune_data/pad_ufes_20/<images>  (jpg files, flat or in images/ subfolder)
-
-    Kaggle link: https://www.kaggle.com/datasets/andrewmvd/pad-ufes-20
+    Download PAD-UFES-20 from Kaggle using the kaggle CLI.
+    Requires: pip install kaggle  +  ~/.kaggle/kaggle.json credentials.
+    Dataset: https://www.kaggle.com/datasets/andrewmvd/pad-ufes-20
     """
+    import subprocess
     out_dir = data_dir / "pad_ufes_20"
     if (out_dir / "metadata.csv").exists():
         log.info("PAD-UFES-20 already present at %s", out_dir)
         return out_dir
 
-    log.error("="*60)
-    log.error("PAD-UFES-20 dataset NOT FOUND.")
-    log.error("")
-    log.error("  1. Download from Kaggle:")
-    log.error("     https://www.kaggle.com/datasets/andrewmvd/pad-ufes-20")
-    log.error("")
-    log.error("  2. Unzip and place files so the structure is:")
-    log.error("     finetune_data/pad_ufes_20/metadata.csv")
-    log.error("     finetune_data/pad_ufes_20/*.png  (or images/ subfolder)")
-    log.error("")
-    log.error("  3. Re-run this script.")
-    log.error("="*60)
-    sys.exit(1)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Check kaggle credentials
+    kaggle_json = Path.home() / ".kaggle" / "kaggle.json"
+    if not kaggle_json.exists():
+        log.error("="*60)
+        log.error("Kaggle credentials not found at ~/.kaggle/kaggle.json")
+        log.error("")
+        log.error("  1. Go to https://www.kaggle.com/settings")
+        log.error("  2. Click 'Create New Token' -> downloads kaggle.json")
+        log.error("  3. On this machine run:")
+        log.error("       mkdir -p ~/.kaggle")
+        log.error("       mv /path/to/kaggle.json ~/.kaggle/kaggle.json")
+        log.error("       chmod 600 ~/.kaggle/kaggle.json")
+        log.error("  4. Re-run this script.")
+        log.error("="*60)
+        sys.exit(1)
+
+    log.info("Downloading PAD-UFES-20 from Kaggle (andrewmvd/pad-ufes-20) ...")
+    log.info("This is ~1GB, may take a few minutes.")
+    result = subprocess.run(
+        ["kaggle", "datasets", "download",
+         "-d", "andrewmvd/pad-ufes-20",
+         "--unzip",
+         "-p", str(out_dir)],
+        capture_output=False,
+    )
+    if result.returncode != 0:
+        log.error("kaggle download failed (exit code %d)", result.returncode)
+        log.error("Try running manually: kaggle datasets download -d andrewmvd/pad-ufes-20 --unzip -p %s", out_dir)
+        sys.exit(1)
+
+    # Flatten if Kaggle nested into a subfolder
+    for sub in out_dir.iterdir():
+        if sub.is_dir() and (sub / "metadata.csv").exists():
+            log.info("Flattening subfolder %s -> %s", sub, out_dir)
+            for f in sub.iterdir():
+                f.rename(out_dir / f.name)
+            sub.rmdir()
+            break
+
+    if not (out_dir / "metadata.csv").exists():
+        log.error("metadata.csv not found after download. Check: %s", out_dir)
+        sys.exit(1)
+
+    log.info("PAD-UFES-20 downloaded successfully to %s", out_dir)
+    return out_dir
 
 
 def download_fitzpatrick(data_dir: Path) -> Path:
