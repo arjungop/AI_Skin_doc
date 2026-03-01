@@ -190,38 +190,31 @@ def download_with_progress(url: str, dest: Path, desc: str = ""):
 
 def download_padufes(data_dir: Path) -> Path:
     """
-    Download PAD-UFES-20 from Zenodo.
-    DOI: 10.5281/zenodo.3977616
-    Images come in 3 zip parts + metadata.csv
-    Returns path to extracted directory.
+    Expects PAD-UFES-20 to be placed manually (download from Kaggle).
+    Place the dataset at:  finetune_data/pad_ufes_20/
+      - finetune_data/pad_ufes_20/metadata.csv
+      - finetune_data/pad_ufes_20/<images>  (jpg files, flat or in images/ subfolder)
+
+    Kaggle link: https://www.kaggle.com/datasets/andrewmvd/pad-ufes-20
     """
     out_dir = data_dir / "pad_ufes_20"
     if (out_dir / "metadata.csv").exists():
-        log.info("PAD-UFES-20 already present.")
+        log.info("PAD-UFES-20 already present at %s", out_dir)
         return out_dir
-    out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Correct Zenodo record: 3977616 (new /records/ URL format)
-    base = "https://zenodo.org/records/3977616/files"
-    urls = [
-        (f"{base}/imgs_part_1.zip?download=1", out_dir / "imgs_part_1.zip", "PAD-UFES-20 images part 1/3"),
-        (f"{base}/imgs_part_2.zip?download=1", out_dir / "imgs_part_2.zip", "PAD-UFES-20 images part 2/3"),
-        (f"{base}/imgs_part_3.zip?download=1", out_dir / "imgs_part_3.zip", "PAD-UFES-20 images part 3/3"),
-        (f"{base}/metadata.csv?download=1",     out_dir / "metadata.csv",   "PAD-UFES-20 metadata"),
-    ]
-    for url, dest, desc in urls:
-        download_with_progress(url, dest, desc)
-
-    # Unzip all parts
-    for part in ["imgs_part_1.zip", "imgs_part_2.zip", "imgs_part_3.zip"]:
-        zip_path = out_dir / part
-        if zip_path.exists():
-            log.info("  Extracting %s ...", part)
-            with zipfile.ZipFile(zip_path) as zf:
-                zf.extractall(out_dir)
-            zip_path.unlink()
-
-    return out_dir
+    log.error("="*60)
+    log.error("PAD-UFES-20 dataset NOT FOUND.")
+    log.error("")
+    log.error("  1. Download from Kaggle:")
+    log.error("     https://www.kaggle.com/datasets/andrewmvd/pad-ufes-20")
+    log.error("")
+    log.error("  2. Unzip and place files so the structure is:")
+    log.error("     finetune_data/pad_ufes_20/metadata.csv")
+    log.error("     finetune_data/pad_ufes_20/*.png  (or images/ subfolder)")
+    log.error("")
+    log.error("  3. Re-run this script.")
+    log.error("="*60)
+    sys.exit(1)
 
 
 def download_fitzpatrick(data_dir: Path) -> Path:
