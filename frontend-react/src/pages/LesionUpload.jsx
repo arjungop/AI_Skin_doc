@@ -7,6 +7,209 @@ import {
 } from 'react-icons/lu'
 import { Card, CardTitle, CardDescription, CardData, CardBadge, IconWrapper } from '../components/Card'
 
+const DISEASE_INFO = {
+  melanoma: {
+    name: 'Melanoma',
+    icon: '⚠️',
+    severity: 'danger',
+    label: 'Potentially Malignant',
+    what: 'The most serious form of skin cancer. Develops from pigment-producing cells (melanocytes). Can spread rapidly to other organs if not caught early.',
+    looks: 'Asymmetric mole with irregular, notched borders. Often multi-coloured (tan, brown, black, red, white). Usually larger than 6mm and changes over time.',
+    urgency: 'See a dermatologist within 2 weeks. Early detection dramatically increases survival rates.',
+    action: 'Book an urgent dermatology appointment. Avoid sun exposure on the area. Do not pick or scratch it.',
+  },
+  ak: {
+    name: 'Actinic Keratosis',
+    icon: '🔶',
+    severity: 'warning',
+    label: 'Pre-Cancerous',
+    what: 'A pre-cancerous rough, scaly patch caused by years of UV sun exposure. A small percentage can develop into squamous cell carcinoma if left untreated.',
+    looks: 'Rough, dry, scaly patch — often red, pink or brown. Feels like sandpaper. Common on the face, ears, scalp, neck and backs of hands.',
+    urgency: 'Not immediately dangerous but should be reviewed by a dermatologist within 1–2 months.',
+    action: 'Book a dermatology appointment. Apply SPF 50+ sunscreen daily. Treatment options include cryotherapy, topical creams or laser therapy.',
+  },
+  nevus: {
+    name: 'Melanocytic Nevus (Mole)',
+    icon: '🟤',
+    severity: 'success',
+    label: 'Typically Benign',
+    what: 'A common mole formed by a cluster of pigmented cells. Most moles are harmless, but they should be monitored monthly for any changes that could indicate melanoma.',
+    looks: 'Small, round or oval, uniformly coloured spot (tan to dark brown) with well-defined borders. Usually under 6mm. May be flat or raised.',
+    urgency: 'Monitor monthly. See a doctor if it changes in size, colour, shape, or starts bleeding.',
+    action: 'No treatment needed unless it changes. Use the ABCDE self-check monthly: Asymmetry, Border, Colour, Diameter, Evolving.',
+  },
+  seborrheic_keratosis: {
+    name: 'Seborrheic Keratosis',
+    icon: '🟫',
+    severity: 'success',
+    label: 'Benign',
+    what: 'A very common, non-cancerous skin growth that becomes more frequent with age. Completely harmless with no link to cancer.',
+    looks: 'Waxy, wart-like, "stuck-on" appearance. Ranges from light tan to almost black. Can be rough or smooth. Often on the face, chest, shoulders or back.',
+    urgency: 'No medical urgency — purely cosmetic.',
+    action: 'No treatment required. Can be removed for cosmetic reasons by a dermatologist via cryotherapy or shaving.',
+  },
+  eczema: {
+    name: 'Eczema (Atopic Dermatitis)',
+    icon: '🔴',
+    severity: 'warning',
+    label: 'Chronic Inflammatory',
+    what: 'A chronic skin condition causing dry, intensely itchy, inflamed skin. Often linked to asthma and hay fever. Not contagious.',
+    looks: 'Red, dry, scaly, itchy patches. May weep fluid or crust over. Common on the backs of knees, inside elbows, face and neck.',
+    urgency: 'Seek care if severely flared, showing signs of infection (yellow crust or pus), or not responding to moisturisers.',
+    action: 'Moisturise frequently with fragrance-free emollients. Avoid triggers. Use topical steroids for flares as directed. Avoid scratching.',
+  },
+  psoriasis: {
+    name: 'Psoriasis',
+    icon: '🟠',
+    severity: 'warning',
+    label: 'Chronic Autoimmune',
+    what: 'An autoimmune condition causing skin cells to multiply 10x faster than normal, leading to thick, scaly build-up. Not contagious.',
+    looks: 'Red patches covered with silvery-white scales. Often on elbows, knees, scalp and lower back. May itch or burn. Nails can become pitted.',
+    urgency: 'Not an emergency, but widespread or joint-affecting psoriasis needs specialist care.',
+    action: 'Topical corticosteroids and vitamin D creams for mild cases. Phototherapy or biologic drugs for moderate-severe disease. Manage stress.',
+  },
+  fungal: {
+    name: 'Fungal Skin Infection',
+    icon: '🍄',
+    severity: 'success',
+    label: 'Infectious — Treatable',
+    what: 'Infections caused by various fungi including ringworm (tinea corporis), athlete\'s foot (tinea pedis) and jock itch (tinea cruris). Very common and highly treatable.',
+    looks: 'Ring-shaped, red, scaly patches with clearer centres and raised edges. Can affect any skin area, scalp, nails or feet. May be itchy.',
+    urgency: 'Low urgency. Treat promptly to prevent spread to others.',
+    action: 'Over-the-counter antifungal cream (e.g. clotrimazole) for 2–4 weeks. Keep the area clean and dry. See a GP if not improving.',
+  },
+  impetigo: {
+    name: 'Impetigo',
+    icon: '🔶',
+    severity: 'warning',
+    label: 'Bacterial Infection',
+    what: 'A highly contagious bacterial skin infection most common in children. Caused by Staphylococcus aureus or Streptococcus pyogenes. Responds well to antibiotics.',
+    looks: 'Red sores that burst and ooze, forming a characteristic honey-coloured crust. Often around the nose and mouth. May itch. Spreads easily.',
+    urgency: 'See a GP within a few days. Keep the child away from school or nursery until 48 hours after starting antibiotics.',
+    action: 'Topical antibiotic cream for mild cases; oral antibiotics for severe or widespread infection. Keep sores clean and covered.',
+  },
+  wart: {
+    name: 'Wart / Verruca',
+    icon: '🌱',
+    severity: 'success',
+    label: 'Benign — Viral (HPV)',
+    what: 'Non-cancerous skin growths caused by the human papillomavirus (HPV). Very common, especially in children and young adults. Spread by direct contact.',
+    looks: 'Small, rough, grainy bumps — flesh-coloured, white or tan. Often have black dots (clotted blood vessels). Appear anywhere but especially hands and soles.',
+    urgency: 'Not urgent. Many resolve naturally within 2 years. Seek help if painful or spreading rapidly.',
+    action: 'Over-the-counter salicylic acid treatments work for most warts. GP can offer cryotherapy. Avoid picking to prevent spread.',
+  },
+  dermatitis: {
+    name: 'Dermatitis',
+    icon: '🔴',
+    severity: 'warning',
+    label: 'Skin Inflammation',
+    what: 'An umbrella term for skin inflammation. Contact dermatitis is triggered by an irritant or allergen. Seborrhoeic dermatitis is linked to a yeast and affects oily areas.',
+    looks: 'Redness, swelling, itching, blistering or scaling. Contact dermatitis often has a clear boundary at the point of contact. Seborrhoeic type appears on the scalp, face and chest.',
+    urgency: 'Seek care if severe, infected, or affecting daily life and sleep.',
+    action: 'Identify and avoid triggers. Regular moisturising and mild topical steroids for flares. Antifungal shampoo for seborrhoeic type.',
+  },
+  drug_eruption: {
+    name: 'Drug Eruption',
+    icon: '💊',
+    severity: 'warning',
+    label: 'Medication Reaction',
+    what: 'A skin rash caused by an adverse reaction to a medication. Can range from a mild morbilliform rash to severe life-threatening reactions (Stevens-Johnson syndrome).',
+    looks: 'Widespread red spots or blotches resembling measles (morbilliform). Fixed drug eruptions reappear as a dark patch in the same location each time.',
+    urgency: 'Contact your GP or pharmacist. Seek emergency care immediately if blistering, mouth sores or breathing difficulties occur — these are medical emergencies.',
+    action: 'Identify and stop the causative drug with medical guidance. Antihistamines for mild itch. Hospital care for severe reactions.',
+  },
+  hyperpigmentation: {
+    name: 'Hyperpigmentation',
+    icon: '🟤',
+    severity: 'success',
+    label: 'Cosmetic — Benign',
+    what: 'Dark patches on the skin caused by excess melanin. Common causes include sun damage (solar lentigines), hormonal changes (melasma), or post-inflammatory marks after acne or injury.',
+    looks: 'Flat, darkened patches — tan, brown or grey. Clearly defined boundaries. Common on the face, neck and hands. No pain or texture change.',
+    urgency: 'Not a medical emergency. Consult a dermatologist if patches are spreading rapidly or changing in character.',
+    action: 'Daily SPF 50+ sunscreen is essential. Topical treatments: vitamin C, niacinamide, retinoids or prescribed hydroquinone. Chemical peels or laser for stubborn cases.',
+  },
+  alopecia: {
+    name: 'Alopecia (Hair Loss)',
+    icon: '🪄',
+    severity: 'warning',
+    label: 'Hair Loss Condition',
+    what: 'Hair loss from various causes including alopecia areata (autoimmune), androgenetic alopecia (pattern baldness), stress-related telogen effluvium, or scarring conditions.',
+    looks: 'Smooth, round patches of hair loss (areata). Diffuse thinning across the scalp (androgenetic). Scarring alopecia may show redness or scaling around follicles.',
+    urgency: 'See a dermatologist if patches are expanding quickly, the scalp is inflamed, or hair loss is sudden and widespread.',
+    action: 'Topical minoxidil for androgenetic alopecia. Corticosteroid injections or immunotherapy for areata. Treat any underlying medical causes.',
+  },
+  angioma: {
+    name: 'Angioma (Vascular Lesion)',
+    icon: '❤️',
+    severity: 'success',
+    label: 'Benign — Vascular',
+    what: 'Benign overgrowths of blood vessels in the skin. Cherry angiomas are extremely common in adults, especially after age 30. Spider angiomas have a central red dot with radiating vessels.',
+    looks: 'Bright cherry-red, smooth, dome-shaped papule. Blanches when pressed. Most common on the trunk, upper arms and shoulders. Usually 1–5mm.',
+    urgency: 'No medical urgency. Seek care if it bleeds repeatedly, grows rapidly, or its appearance changes.',
+    action: 'No treatment required. Can be easily removed for cosmetic reasons via laser or electrocautery by a dermatologist.',
+  },
+  lupus: {
+    name: 'Cutaneous Lupus',
+    icon: '🦋',
+    severity: 'warning',
+    label: 'Autoimmune — Needs Review',
+    what: 'Lupus is a systemic autoimmune disease that can manifest on the skin. UV light commonly triggers flares. Skin involvement may indicate or precede systemic lupus.',
+    looks: 'Classic butterfly (malar) rash across the cheeks and nose. May be scaly (discoid lupus). Also: photosensitive rashes elsewhere, mouth ulcers, hair thinning.',
+    urgency: 'See a rheumatologist or dermatologist. Lupus can affect the kidneys, heart, joints and lungs if not treated.',
+    action: 'Sun protection is critical — SPF 50+, hats, clothing. Hydroxychloroquine (anti-malarial) is first-line. Immunosuppressives for severe cases.',
+  },
+  vasculitis: {
+    name: 'Vasculitis',
+    icon: '🔴',
+    severity: 'danger',
+    label: 'Needs Urgent Review',
+    what: 'Inflammation of blood vessel walls causing damage and restricted blood flow. Skin vasculitis often signals an underlying systemic condition affecting other organs.',
+    looks: 'Palpable purpura — raised, non-blanching, red or purple spots or patches. Typically on the lower legs. May develop into ulcers in severe cases.',
+    urgency: 'See a doctor promptly. Systemic vasculitis can affect the kidneys, lungs and peripheral nerves.',
+    action: 'Blood tests and skin biopsy needed for diagnosis. Treatment depends on the underlying cause: corticosteroids and immunosuppressives under specialist supervision.',
+  },
+  bullous: {
+    name: 'Bullous Disease (Blistering Disorder)',
+    icon: '💧',
+    severity: 'danger',
+    label: 'Autoimmune — Potentially Serious',
+    what: 'Autoimmune conditions (including bullous pemphigoid and pemphigus vulgaris) where the immune system attacks proteins that hold skin layers together, forming blisters.',
+    looks: 'Large, tense, fluid-filled blisters (bullous pemphigoid) or fragile, easily-ruptured blisters leaving raw erosions (pemphigus). Often on the trunk and limbs.',
+    urgency: 'Seek prompt medical attention. Widespread blistering can lead to dangerous infections and fluid loss.',
+    action: 'Diagnosis confirmed by skin biopsy and blood tests. Treated with systemic corticosteroids and immunosuppressives under specialist dermatology care.',
+  },
+  scabies: {
+    name: 'Scabies',
+    icon: '🐛',
+    severity: 'warning',
+    label: 'Parasitic — Contagious',
+    what: 'A highly contagious infestation by the Sarcoptes scabiei mite, which burrows into the outer layer of skin. Causes intense itching, especially at night. Spreads through prolonged skin contact.',
+    looks: 'Tiny blisters or pimples and S-shaped burrow marks. Most common between the fingers, on the wrists, armpits, waistline and genitals. Widespread rash from allergic response.',
+    urgency: 'Treat as soon as possible to prevent spread to household members and close contacts.',
+    action: 'Prescription permethrin 5% cream or oral ivermectin. All household contacts must be treated at the same time. Wash all bedding and clothing at 60°C.',
+  },
+  viral: {
+    name: 'Viral Skin Infection',
+    icon: '🦠',
+    severity: 'success',
+    label: 'Infectious — Usually Treatable',
+    what: 'Skin conditions caused by viruses including herpes simplex (cold sores), herpes zoster (shingles), chickenpox, molluscum contagiosum and viral exanthems (rashes).',
+    looks: 'Varies: grouped blisters on a red base (herpes/shingles); pink, pearly domed papules with a central dimple (molluscum); widespread red blotchy rash (viral exanthem).',
+    urgency: 'Seek care urgently for shingles involving the eye or ear. Herpes in immunocompromised patients needs prompt antivirals.',
+    action: 'Antivirals (acyclovir, valacyclovir) for herpes/shingles — most effective when started within 72 hours. Most other viral rashes resolve with rest and symptom management.',
+  },
+  systemic: {
+    name: 'Systemic Disease — Skin Manifestation',
+    icon: '🏥',
+    severity: 'warning',
+    label: 'Requires Investigation',
+    what: 'The skin can reflect internal diseases. Conditions like diabetes, thyroid disorders, kidney disease, liver disease and autoimmune diseases often appear on the skin first.',
+    looks: 'Varies widely: yellowing (jaundice from liver disease); bronze discolouration (Addison\'s disease); xanthomas (fatty yellow deposits from high lipids); velvety dark patches in folds (acanthosis nigricans).',
+    urgency: 'Should be investigated by a GP or internal medicine specialist. The skin finding may be the earliest visible sign of internal disease.',
+    action: 'See a GP for a full examination and blood tests. Treatment is directed at the underlying systemic condition.',
+  },
+}
+
 export default function LesionUpload() {
   const [file, setFile] = useState(null)
   const [preview, setPreview] = useState(null)
@@ -295,6 +498,57 @@ export default function LesionUpload() {
                     </div>
                   </div>
                 </Card>
+
+                {/* Disease info panel */}
+                {res.label && DISEASE_INFO[res.label] && (() => {
+                  const d = DISEASE_INFO[res.label]
+                  const borderCls = d.severity === 'danger'
+                    ? 'border-red-500/30 bg-red-500/5'
+                    : d.severity === 'warning'
+                      ? 'border-yellow-500/30 bg-yellow-500/5'
+                      : 'border-green-500/30 bg-green-500/5'
+                  const urgencyCls = d.severity === 'danger'
+                    ? 'bg-red-500/10 border-red-500/30 text-red-400'
+                    : d.severity === 'warning'
+                      ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
+                      : 'bg-green-500/10 border-green-500/30 text-green-400'
+                  return (
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+                      <Card variant="glass" className={`border ${borderCls}`}>
+                        <div className="flex items-start justify-between gap-3 mb-4">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl">{d.icon}</span>
+                            <div>
+                              <CardTitle>{d.name}</CardTitle>
+                              <CardBadge variant={d.severity}>{d.label}</CardBadge>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="space-y-4 text-sm">
+                          <div>
+                            <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1">What is it?</p>
+                            <p className="text-text-primary leading-relaxed">{d.what}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1">What does it look like?</p>
+                            <p className="text-text-primary leading-relaxed">{d.looks}</p>
+                          </div>
+                          <div className={`p-3 rounded-xl border ${urgencyCls}`}>
+                            <p className="text-xs font-semibold uppercase tracking-wider mb-1">When to seek care</p>
+                            <p className="leading-relaxed">{d.urgency}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1">What to do</p>
+                            <p className="text-text-primary leading-relaxed">{d.action}</p>
+                          </div>
+                          <p className="text-xs text-text-muted italic border-t border-white/10 pt-3">
+                            ⚕️ This information is educational only. Always consult a qualified dermatologist for diagnosis and treatment.
+                          </p>
+                        </div>
+                      </Card>
+                    </motion.div>
+                  )
+                })()}
 
                 {res.lesion_id && (
                   <Card variant="glass">
