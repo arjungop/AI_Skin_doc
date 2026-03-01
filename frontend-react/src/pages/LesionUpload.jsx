@@ -328,14 +328,14 @@ export default function LesionUpload() {
                     type="number"
                     value={overridePatientId}
                     onChange={e => setOverridePatientId(e.target.value)}
-                    className="w-full bg-surface-elevated border border-white/10 rounded-xl px-4 py-3 text-text-primary focus:border-ai-500/50 focus:ring-2 focus:ring-ai-500/20 outline-none transition-all"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-text-primary focus:border-ai-500/50 focus:ring-2 focus:ring-ai-500/20 outline-none transition-all"
                     placeholder="Enter Patient ID"
                   />
                 </div>
               )}
 
               <div
-                className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer ${dragActive ? 'border-ai-500 bg-ai-500/10' : 'border-white/10 hover:border-ai-500/30 hover:bg-white/5'
+                className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer ${dragActive ? 'border-ai-500 bg-ai-500/10' : 'border-slate-300 hover:border-ai-500/50 hover:bg-slate-50'
                   }`}
                 onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop}
                 onClick={() => document.getElementById('lesion-file').click()}
@@ -349,11 +349,11 @@ export default function LesionUpload() {
                   </div>
                 ) : (
                   <div className="py-8">
-                    <div className="w-16 h-16 rounded-full bg-white/5 mx-auto flex items-center justify-center mb-4">
-                      <LuUpload className="text-ai-400" size={32} />
+                    <div className="w-16 h-16 rounded-full bg-ai-100 mx-auto flex items-center justify-center mb-4">
+                      <LuUpload className="text-ai-500" size={32} />
                     </div>
                     <p className="text-text-primary font-medium">Click to upload or drag & drop</p>
-                    <p className="text-xs text-text-muted mt-2">JPG, PNG up to 10MB</p>
+                    <p className="text-xs text-slate-400 mt-2">JPG, PNG up to 10MB</p>
                   </div>
                 )}
                 <input id="lesion-file" type="file" onChange={e => validateAndSetFile(e.target.files[0])} className="hidden" accept="image/jpeg,image/png,image/webp" />
@@ -363,13 +363,13 @@ export default function LesionUpload() {
                 <LuTriangleAlert className="text-orange-400 flex-shrink-0" />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-text-primary">High Sensitivity Mode</p>
-                  <p className="text-xs text-text-muted">May increase false positives, recommended for initial screening.</p>
+                  <p className="text-xs text-slate-500">May increase false positives, recommended for initial screening.</p>
                 </div>
                 <input
                   type="checkbox"
                   checked={highSensitivity}
                   onChange={e => setHighSensitivity(e.target.checked)}
-                  className="w-5 h-5 rounded border-white/20 bg-white/10 text-ai-500 focus:ring-ai-500/50"
+                  className="w-5 h-5 rounded border-slate-300 bg-white text-ai-500 focus:ring-ai-500/50"
                 />
               </div>
 
@@ -393,7 +393,7 @@ export default function LesionUpload() {
             {!res ? (
               <Card variant="glass" className="h-full flex items-center justify-center text-center p-8 opacity-60">
                 <div>
-                  <LuSparkles className="text-text-muted mx-auto mb-4" size={48} />
+                  <LuSparkles className="text-ai-400 mx-auto mb-4" size={48} />
                   <h3 className="text-xl font-bold text-text-primary mb-2">Ready for Analysis</h3>
                   <p className="text-text-tertiary">Results will appear here with AI confidence scores and recommendations.</p>
                 </div>
@@ -403,11 +403,11 @@ export default function LesionUpload() {
 
                 {/* Low-confidence warning banner */}
                 {res.is_low_confidence && (
-                  <div className="flex items-start gap-3 p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/30">
-                    <LuTriangleAlert className="text-yellow-400 flex-shrink-0 mt-0.5" size={20} />
+                  <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 border border-amber-300">
+                    <LuTriangleAlert className="text-amber-500 flex-shrink-0 mt-0.5" size={20} />
                     <div>
-                      <p className="text-sm font-semibold text-yellow-300">Image quality too low for confident prediction</p>
-                      <p className="text-xs text-yellow-200/70 mt-1">The model is uncertain — please retake the photo as a clear, well-lit close-up of the skin lesion. Avoid blurry or full-body shots.</p>
+                      <p className="text-sm font-semibold text-yellow-700">Image quality too low for confident prediction</p>
+                      <p className="text-xs text-yellow-600 mt-1">The model is uncertain — please retake the photo as a clear, well-lit close-up of the skin lesion. Avoid blurry or full-body shots.</p>
                     </div>
                   </div>
                 )}
@@ -421,7 +421,7 @@ export default function LesionUpload() {
                           {res.confidence != null ? (res.confidence * 100).toFixed(1) + '%' : '—'}
                         </span>
                         {res.entropy != null && (
-                          <span className="ml-2 text-text-muted text-xs">
+                          <span className="ml-2 text-slate-400 text-xs">
                             · Certainty {(100 - res.entropy * 100).toFixed(0)}%
                           </span>
                         )}
@@ -448,11 +448,11 @@ export default function LesionUpload() {
                     />
                     {res.risk_score != null && (
                       <div>
-                        <div className="flex justify-between text-xs text-text-muted mb-1">
+                        <div className="flex justify-between text-xs text-slate-500 mb-1">
                           <span>Malignancy risk score</span>
                           <span>{(res.risk_score * 100).toFixed(1)}%</span>
                         </div>
-                        <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                        <div className="h-2 rounded-full bg-slate-200 overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all ${res.risk_score > 0.5 ? 'bg-danger' : res.risk_score > 0.3 ? 'bg-yellow-500' : 'bg-green-500'}`}
                             style={{ width: `${Math.min(100, res.risk_score * 100)}%` }}
@@ -463,20 +463,20 @@ export default function LesionUpload() {
 
                     {/* Top predictions breakdown */}
                     {res.top_probs && Object.keys(res.top_probs).length > 0 && (
-                      <div className="pt-4 border-t border-white/10">
-                        <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-3">Top Predictions</h4>
+                      <div className="pt-4 border-t border-slate-200">
+                        <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Top Predictions</h4>
                         <div className="space-y-2">
                           {Object.entries(res.top_probs).map(([cls, prob], i) => (
                             <div key={cls}>
                               <div className="flex justify-between text-xs mb-0.5">
-                                <span className={`${i === 0 ? 'text-text-primary font-medium' : 'text-text-muted'}`}>
+                                <span className={`${i === 0 ? 'text-text-primary font-medium' : 'text-slate-500'}`}>
                                   {cls.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
                                 </span>
-                                <span className="text-text-muted">{(prob * 100).toFixed(1)}%</span>
+                                <span className="text-slate-500">{(prob * 100).toFixed(1)}%</span>
                               </div>
-                              <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                              <div className="h-1.5 rounded-full bg-slate-200 overflow-hidden">
                                 <div
-                                  className={`h-full rounded-full ${i === 0 ? 'bg-ai-500' : 'bg-white/30'}`}
+                                  className={`h-full rounded-full ${i === 0 ? 'bg-ai-500' : 'bg-slate-400'}`}
                                   style={{ width: `${Math.min(100, prob * 100)}%` }}
                                 />
                               </div>
@@ -486,8 +486,8 @@ export default function LesionUpload() {
                       </div>
                     )}
 
-                    <div className="pt-4 border-t border-white/10">
-                      <h4 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-2">AI Recommendation</h4>
+                    <div className="pt-4 border-t border-slate-200">
+                      <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2">AI Recommendation</h4>
                       <p className="text-text-primary leading-relaxed">
                         {res.is_low_confidence
                           ? 'Image quality is too low for a reliable result. Please retake with a clear, close-up photo in good lighting.'
@@ -503,15 +503,15 @@ export default function LesionUpload() {
                 {res.label && DISEASE_INFO[res.label] && (() => {
                   const d = DISEASE_INFO[res.label]
                   const borderCls = d.severity === 'danger'
-                    ? 'border-red-500/30 bg-red-500/5'
+                    ? 'border-red-200 bg-red-50/50'
                     : d.severity === 'warning'
-                      ? 'border-yellow-500/30 bg-yellow-500/5'
-                      : 'border-green-500/30 bg-green-500/5'
+                      ? 'border-yellow-200 bg-yellow-50/50'
+                      : 'border-green-200 bg-green-50/50'
                   const urgencyCls = d.severity === 'danger'
-                    ? 'bg-red-500/10 border-red-500/30 text-red-400'
+                    ? 'bg-red-50 border-red-200 text-red-700'
                     : d.severity === 'warning'
-                      ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
-                      : 'bg-green-500/10 border-green-500/30 text-green-400'
+                      ? 'bg-yellow-50 border-yellow-200 text-yellow-800'
+                      : 'bg-green-50 border-green-200 text-green-800'
                   return (
                     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
                       <Card variant="glass" className={`border ${borderCls}`}>
@@ -541,7 +541,7 @@ export default function LesionUpload() {
                             <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1">What to do</p>
                             <p className="text-text-primary leading-relaxed">{d.action}</p>
                           </div>
-                          <p className="text-xs text-text-muted italic border-t border-white/10 pt-3">
+                          <p className="text-xs text-slate-400 italic border-t border-slate-200 pt-3">
                             ⚕️ This information is educational only. Always consult a qualified dermatologist for diagnosis and treatment.
                           </p>
                         </div>
@@ -558,13 +558,13 @@ export default function LesionUpload() {
                         <button
                           onClick={runDiagnosis}
                           disabled={diagLoading}
-                          className="w-full py-3 bg-surface-elevated hover:bg-white/5 border border-white/10 rounded-xl text-text-primary transition-all flex items-center justify-center gap-2 font-medium disabled:opacity-50"
+                          className="w-full py-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-text-primary transition-all flex items-center justify-center gap-2 font-medium disabled:opacity-50"
                         >
                           {diagLoading ? <LuLoader className="animate-spin" /> : <LuFileText />} {diagLoading ? 'Generating...' : 'Generate Diagnosis Report'}
                         </button>
                       ) : (
                         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
-                          <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-sm leading-relaxed text-text-secondary max-h-60 overflow-y-auto">
+                          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-sm leading-relaxed text-text-secondary max-h-60 overflow-y-auto">
                             {diag}
                           </div>
                           <button onClick={() => {
