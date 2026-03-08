@@ -94,7 +94,11 @@ PADUFES_MAP = {
     "NEV": "nevus",                 # Nevus          → nevus
     "ACK": "ak",                    # Actinic Keratosis → ak
     "SEK": "seborrheic_keratosis",  # Seborrheic Keratosis
-    "BCC": "melanoma",              # Basal Cell Carcinoma — closest cancer class
+    # BCC (Basal Cell Carcinoma) intentionally EXCLUDED:
+    # BCC is a pearly/pink nodule — visually nothing like pigmented melanoma.
+    # 845 BCC samples mapped to "melanoma" corrupted the melanoma class,
+    # causing real melanoma photos to be classified as nevus (91.8%).
+    # "BCC": "melanoma",  ← DO NOT RE-ADD
     "SCC": "ak",                    # Squamous Cell Carcinoma — pre/cancer
 }
 

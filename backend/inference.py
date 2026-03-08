@@ -41,11 +41,14 @@ DEFAULT_IMG_SIZE = 384
 IMAGENET_MEAN    = [0.485, 0.456, 0.406]
 IMAGENET_STD     = [0.229, 0.224, 0.225]
 
-# Post-hoc logit bias: all class boosts and penalties have been removed.
-# Boosts caused rare classes to beat correct predictions on every image.
-# The impetigo -3.5 penalty caused 0% impetigo accuracy (suppressed even
-# true impetigo images). Let the model's own probabilities decide.
-LOGIT_BIAS: dict[str, float] = {}
+# Post-hoc logit bias.
+# melanoma +1.5: fine-tuned model's melanoma class was corrupted by BCC
+# training data (845 BCC samples mapped to "melanoma"). This temporary bias
+# ensures any residual melanoma signal (>0.5% raw) triggers hasCancerSignal.
+# Remove once the model is retrained with the corrected PADUFES_MAP.
+LOGIT_BIAS: dict[str, float] = {
+    "melanoma": 1.5,
+}
 
 # Temperature for softmax: T=1.0 (neutral) — model's raw probabilities.
 SOFTMAX_TEMPERATURE: float = 1.0
