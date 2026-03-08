@@ -106,6 +106,11 @@ def me(user: models.User = Depends(get_current_user)):
     claims = getattr(user, 'token_claims', {})
     if isinstance(claims, dict):
         payload["claims"] = {k: claims.get(k) for k in ("sub", "role", "patient_id", "doctor_id", "exp")}
+        # Expose patient_id / doctor_id at top level (matches /auth/login shape)
+        if claims.get("patient_id"):
+            payload["patient_id"] = claims["patient_id"]
+        if claims.get("doctor_id"):
+            payload["doctor_id"] = claims["doctor_id"]
         try:
             from datetime import datetime, timezone
             exp = claims.get("exp")

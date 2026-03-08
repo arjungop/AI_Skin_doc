@@ -19,23 +19,48 @@ export function onAuthExpired(callback) {
   return () => window.removeEventListener(AUTH_EXPIRED_EVENT, callback)
 }
 
+const DEFAULT_TIMEOUT_MS = 15_000
+
 async function request(path, opts = {}) {
   if (!navigator.onLine) {
     throw new Error('You are offline. Please check your internet connection.')
   }
   const headers = { ...(opts.headers || {}), ...authHeaders() }
-  const res = await fetch(`${BASE_URL}${path}`, { ...opts, headers })
-  let data = null
-  try { data = await res.json() } catch { }
-  if (!res.ok) {
-    const detail = (data && (data.detail || data.message)) || res.statusText
-    if (res.status === 401) {
-      window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT))
-      throw new Error('Session expired. Please log in again.')
+  const controller = new AbortController()
+  const timeoutMs = opts.timeout ?? DEFAULT_TIMEOUT_MS
+  const timeoutId = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null
+  try {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      ...opts,
+      headers,
+      signal: opts.signal || controller.signal,
+    })
+    let data = null
+    try { data = await res.json() } catch { }
+    if (!res.ok) {
+      const rawDetail = data && (data.detail || data.message)
+      let detail
+      if (Array.isArray(rawDetail)) {
+        detail = rawDetail.map(e => e.msg || JSON.stringify(e)).join('; ')
+      } else {
+        detail = rawDetail
+      }
+      detail = detail || res.statusText
+      if (res.status === 401 && !path.includes('/auth/login')) {
+        window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT))
+        throw new Error('Session expired. Please log in again.')
+      }
+      throw new Error(detail)
     }
-    throw new Error(detail)
+    return data
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('Request timed out. Please try again.')
+    }
+    throw err
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
   }
-  return data
 }
 
 export const api = {
@@ -46,16 +71,30 @@ export const api = {
   me: () => request('/auth/me'),
   forgotPassword: (email) => request('/auth/forgot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) }),
   register: (payload) => request('/patients/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
-  listPatients: (q) => request(`/patients${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  listPatients: (q) => request(`/patients/${q ? `?q=${encodeURIComponent(q)}` : ''}`),
   // Appointments
   createAppointment: (payload) => request('/appointments/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
-  listAppointments: () => request('/appointments/'),
+  listAppointments: (params) => {
+    const q = new URLSearchParams()
+    if (params) {
+      if (params.status) q.set('status', params.status)
+      if (params.date) q.set('date', params.date)
+    }
+    const qs = q.toString()
+    return request(`/appointments/${qs ? `?${qs}` : ''}`)
+  },
   listDoctorAvailability: (doctorId) => request(`/doctors/${doctorId}/availability`),
   setDoctorAvailability: (doctorId, items) => request(`/doctors/${doctorId}/availability`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(items) }),
-  listBookedSlots: (doctorId, date) => request(`/appointments/booked-slots?doctor_id=${doctorId}&date=${date}`).catch(() => []),
+  listBookedSlots: (doctorId, date) => request(`/appointments/booked-slots?doctor_id=${doctorId}&date=${date}`).catch((err) => {
+    console.warn('listBookedSlots failed:', err.message)
+    return []
+  }),
   updateAppointmentStatus: (id, status) => request(`/appointments/${id}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }),
+  setAppointmentVideoLink: (id, link) => request(`/appointments/${id}/video-link`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ video_link: link }) }),
   // Doctors
-  listDoctors: (q) => request(`/doctors${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  listDoctors: (q) => request(`/doctors/${q ? `?q=${encodeURIComponent(q)}` : ''}`).then(r => r.items || r),
+  getDoctorPatients: () => request('/doctors/me/patients'),
+  getPatientOverview: (patientId) => request(`/doctors/patients/${patientId}/overview`),
   applyDoctor: (payload) => request('/doctors/apply', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
   // Transactions (simplified billing log)
   createTransaction: (payload) => request('/transactions/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
@@ -160,7 +199,6 @@ export const api = {
   postMessage: (roomId, payload) => request(`/chat/rooms/${roomId}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
   updateMessage: (messageId, payload) => request(`/chat/messages/${messageId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
   markUrgent: (messageId) => request(`/chat/messages/${messageId}/urgent`, { method: 'PUT' }),
-  setVideoLink: (roomId, link) => request(`/chat/rooms/${roomId}/video-link`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ video_link: link }) }),
   // Read receipts & unread
   markRoomRead: (roomId) => request(`/chat/rooms/${roomId}/read`, { method: 'POST' }),
   getUnreadCounts: () => request('/chat/unread'),
@@ -192,6 +230,9 @@ export const api = {
   // Doctor: create plans + steps
   createTreatmentPlan: (data) => request('/routine/plans', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
   addTreatmentStep: (planId, data) => request(`/routine/plans/${planId}/steps`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
+  // AI Skincare Routine
+  generateAiRoutine: (data) => request('/routine/ai-generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
+  getMyRoutine: () => request('/routine/my-routine'),
   // UV Risk (uses backend with Fitzpatrick-aware assessment)
   getUVRisk: (city) => request(`/recommendations/uv-risk${city ? `?city=${encodeURIComponent(city)}` : ''}`),
   // Doctor Suggestions
@@ -199,4 +240,59 @@ export const api = {
   getSuggestions: (patientId) => request(`/recommendations/suggestions/${patientId}`),
   // Doctor Copilot
   generateClinicalNotes: (roomId) => request('/llm/generate_notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ room_id: roomId }) }),
+  // Agent (Agentic AI)
+  agentAnalyze: async (patientId, lesionId, onStep) => {
+    const body = { patient_id: patientId }
+    if (lesionId) body.lesion_id = lesionId
+    const res = await fetch(`${BASE_URL}/agent/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.detail || 'Agent analysis failed')
+    }
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder('utf-8')
+    let buffer = ''
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      let eventType = 'step'
+      for (const line of lines) {
+        if (line.startsWith('event: ')) { eventType = line.slice(7).trim(); continue }
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6))
+            onStep(eventType, data)
+          } catch { /* skip malformed */ }
+        }
+      }
+    }
+    // Flush remaining buffer after stream ends
+    if (buffer.trim()) {
+      const remaining = buffer.split('\n')
+      let eventType = 'step'
+      for (const line of remaining) {
+        if (line.startsWith('event: ')) { eventType = line.slice(7).trim(); continue }
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6))
+            onStep(eventType, data)
+          } catch { /* skip malformed */ }
+        }
+      }
+    }
+  },
+  agentListSessions: () => request('/agent/sessions'),
+  agentGetSession: (id) => request(`/agent/sessions/${id}`),
+  agentGetActions: (sessionId) => request(`/agent/sessions/${sessionId}/actions`),
+  agentApproveAction: (actionId) => request(`/agent/actions/${actionId}/approve`, { method: 'POST' }),
+  agentRejectAction: (actionId) => request(`/agent/actions/${actionId}/reject`, { method: 'POST' }),
+  agentExecuteActions: (sessionId) => request(`/agent/sessions/${sessionId}/execute`, { method: 'POST' }),
+  agentSendHint: (sessionId, hint) => request(`/agent/sessions/${sessionId}/hint`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hint }) }),
 }

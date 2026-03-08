@@ -224,7 +224,17 @@ export default function LesionUpload() {
   const [highSensitivity, setHighSensitivity] = useState(true)
   const [dragActive, setDragActive] = useState(false)
 
-  const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+  // True when melanoma or AK appears in top predictions with meaningful probability,
+  // even if the top-ranked label is benign. Thresholds are intentionally conservative:
+  // melanoma at 2%+ triggers a danger signal (the most dangerous miss in dermatology),
+  // ak (pre-cancerous) at 5%+ triggers a warning.
+  const hasCancerSignal = !!res && (
+    (res.top_probs?.melanoma || 0) > 0.02 ||
+    (res.top_probs?.ak || 0) > 0.05 ||
+    ['melanoma', 'ak'].includes((res.prediction || '').toLowerCase())
+  )
+
+  const MAX_FILE_SIZE = 15 * 1024 * 1024 // 15MB (matches backend MaxBodySizeMiddleware)
   const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic']
 
   const validateAndSetFile = (f) => {
@@ -234,7 +244,7 @@ export default function LesionUpload() {
       return
     }
     if (f.size > MAX_FILE_SIZE) {
-      setError(`File too large (${(f.size / 1024 / 1024).toFixed(1)}MB). Maximum is 10MB.`)
+      setError(`File too large (${(f.size / 1024 / 1024).toFixed(1)}MB). Maximum is 15MB.`)
       return
     }
     setError('')
@@ -341,11 +351,26 @@ export default function LesionUpload() {
                 onClick={() => document.getElementById('lesion-file').click()}
               >
                 {preview ? (
-                  <div className="relative aspect-video rounded-xl overflow-hidden mx-auto max-w-sm group">
-                    <img src={preview} alt="Preview" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <p className="text-white font-medium flex items-center gap-2"><LuUpload /> Change Image</p>
+                  <div className="relative mx-auto max-w-sm">
+                    <div className="relative aspect-video rounded-xl overflow-hidden group">
+                      <img src={preview} alt="Preview" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <p className="text-white font-medium flex items-center gap-2"><LuUpload /> Change Image</p>
+                      </div>
                     </div>
+                    {/* File size badge */}
+                    {file && (
+                      <div className="mt-2 flex items-center justify-center gap-2">
+                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full border ${file.size > 15 * 1024 * 1024
+                            ? 'bg-red-50 border-red-200 text-red-700'
+                            : file.size > 10 * 1024 * 1024
+                              ? 'bg-amber-50 border-amber-200 text-amber-700'
+                              : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                          }`}>
+                          {file.name.length > 25 ? file.name.slice(0, 22) + '...' : file.name} — {(file.size / 1024 / 1024).toFixed(1)} MB of 15 MB max
+                        </span>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="py-8">
@@ -353,7 +378,7 @@ export default function LesionUpload() {
                       <LuUpload className="text-ai-500" size={32} />
                     </div>
                     <p className="text-text-primary font-medium">Click to upload or drag & drop</p>
-                    <p className="text-xs text-slate-400 mt-2">JPG, PNG up to 10MB</p>
+                    <p className="text-xs text-slate-400 mt-2">JPG, PNG, WebP up to 15MB</p>
                   </div>
                 )}
                 <input id="lesion-file" type="file" onChange={e => validateAndSetFile(e.target.files[0])} className="hidden" accept="image/jpeg,image/png,image/webp" />
@@ -428,12 +453,12 @@ export default function LesionUpload() {
                       </CardDescription>
                     </div>
                     <CardBadge variant={
-                      res.prediction === 'malignant' ? 'danger' :
-                      res.is_low_confidence ? 'warning' : 'success'
+                      hasCancerSignal || (res.risk_score != null && res.risk_score > 0.15) ? 'danger' :
+                        res.is_low_confidence ? 'warning' : 'success'
                     }>
-                      {res.label
-                        ? res.label.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-                        : res.prediction}
+                      {res.prediction
+                        ? res.prediction.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+                        : 'Unknown'}
                     </CardBadge>
                   </div>
 
@@ -441,9 +466,9 @@ export default function LesionUpload() {
                     <CardData
                       label="Risk Assessment"
                       value={
-                        res.prediction === 'malignant' ? 'Needs clinical review' :
-                        res.is_low_confidence ? 'Unclear — retake photo' :
-                        'Low risk — monitor regularly'
+                        hasCancerSignal || (res.risk_score != null && res.risk_score > 0.15) ? 'Needs clinical review' :
+                          res.is_low_confidence ? 'Unclear — retake photo' :
+                            'Low risk — monitor regularly'
                       }
                     />
                     {res.risk_score != null && (
@@ -454,7 +479,7 @@ export default function LesionUpload() {
                         </div>
                         <div className="h-2 rounded-full bg-slate-200 overflow-hidden">
                           <div
-                            className={`h-full rounded-full transition-all ${res.risk_score > 0.5 ? 'bg-danger' : res.risk_score > 0.3 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                            className={`h-full rounded-full transition-all ${hasCancerSignal || res.risk_score > 0.15 ? 'bg-danger' : res.risk_score > 0.05 ? 'bg-yellow-500' : 'bg-green-500'}`}
                             style={{ width: `${Math.min(100, res.risk_score * 100)}%` }}
                           />
                         </div>
@@ -466,22 +491,32 @@ export default function LesionUpload() {
                       <div className="pt-4 border-t border-slate-200">
                         <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Top Predictions</h4>
                         <div className="space-y-2">
-                          {Object.entries(res.top_probs).map(([cls, prob], i) => (
+                          {Object.entries(res.top_probs).map(([cls, prob], i) => {
+                            const isDangerCls = cls === 'melanoma' || cls === 'ak'
+                            const rowCls = isDangerCls && prob > 0.02
+                              ? 'text-red-600 font-semibold'
+                              : i === 0 ? 'text-text-primary font-medium' : 'text-slate-500'
+                            const barCls = isDangerCls && prob > 0.02
+                              ? 'bg-red-500'
+                              : i === 0 ? 'bg-ai-500' : 'bg-slate-400'
+                            return (
                             <div key={cls}>
                               <div className="flex justify-between text-xs mb-0.5">
-                                <span className={`${i === 0 ? 'text-text-primary font-medium' : 'text-slate-500'}`}>
+                                <span className={rowCls}>
                                   {cls.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                                  {isDangerCls && prob > 0.02 && ' ⚠️'}
                                 </span>
-                                <span className="text-slate-500">{(prob * 100).toFixed(1)}%</span>
+                                <span className={isDangerCls && prob > 0.02 ? 'text-red-500' : 'text-slate-500'}>{(prob * 100).toFixed(1)}%</span>
                               </div>
                               <div className="h-1.5 rounded-full bg-slate-200 overflow-hidden">
                                 <div
-                                  className={`h-full rounded-full ${i === 0 ? 'bg-ai-500' : 'bg-slate-400'}`}
+                                  className={`h-full rounded-full ${barCls}`}
                                   style={{ width: `${Math.min(100, prob * 100)}%` }}
                                 />
                               </div>
                             </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       </div>
                     )}
@@ -489,19 +524,23 @@ export default function LesionUpload() {
                     <div className="pt-4 border-t border-slate-200">
                       <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2">AI Recommendation</h4>
                       <p className="text-text-primary leading-relaxed">
-                        {res.is_low_confidence
-                          ? 'Image quality is too low for a reliable result. Please retake with a clear, close-up photo in good lighting.'
-                          : res.prediction === 'malignant'
-                            ? 'This lesion shows features that warrant clinical attention. Please book a dermatologist review within 1–2 weeks.'
-                            : 'No immediate concern detected. Monitor the area monthly and consult a dermatologist if it changes.'}
+                        {hasCancerSignal
+                          ? 'Melanoma or pre-cancerous signals detected among the top predictions. Even when the primary classification appears benign, any melanoma signal warrants professional review — please book a dermatologist appointment within 1–2 weeks.'
+                          : res.is_low_confidence
+                            ? 'Image quality is too low for a reliable result. Please retake with a clear, close-up photo in good lighting.'
+                            : (res.risk_score != null && res.risk_score > 0.15)
+                              ? 'This lesion shows features that warrant clinical attention. Please book a dermatologist review within 1–2 weeks.'
+                              : 'No immediate concern detected. Monitor the area monthly and consult a dermatologist if it changes.'}
                       </p>
                     </div>
                   </div>
                 </Card>
 
-                {/* Disease info panel — only shown for high-confidence predictions */}
-                {res.label && DISEASE_INFO[res.label] && !res.is_low_confidence && (() => {
-                  const d = DISEASE_INFO[res.label]
+                {/* Disease info panel — shows melanoma card when cancer signal detected, otherwise top-prediction card */}
+                {!res.is_low_confidence && (() => {
+                  const infoCls = hasCancerSignal ? 'melanoma' : (res.label || res.prediction)
+                  const d = DISEASE_INFO[infoCls]
+                  if (!d) return null
                   const borderCls = d.severity === 'danger'
                     ? 'border-red-200 bg-red-50/50'
                     : d.severity === 'warning'

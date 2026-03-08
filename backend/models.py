@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Float, Boolean, Text, Enum
 from sqlalchemy.orm import relationship
 from .database import Base
+from .encryption import EncryptedText
 from datetime import datetime, timezone
 import enum
 
@@ -86,16 +87,31 @@ class Appointment(Base):
     appointment_date = Column(DateTime, nullable=False)
     reason = Column(String(255))
     status = Column(String(50), default="Scheduled")
+    video_link = Column(String(500), nullable=True)
 
     patient = relationship("Patient", back_populates="appointments")
     doctor = relationship("Doctor", back_populates="appointments")
+
+
+class DoctorPatient(Base):
+    __tablename__ = "doctor_patients"
+    id = Column(Integer, primary_key=True, index=True)
+    doctor_id = Column(Integer, ForeignKey("doctors.doctor_id", ondelete="CASCADE"), nullable=False)
+    patient_id = Column(Integer, ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=_utcnow)
+
+    doctor = relationship("Doctor")
+    patient = relationship("Patient")
 
 class Lesion(Base):
     __tablename__ = "lesions"
     lesion_id = Column(Integer, primary_key=True, index=True)
     patient_id = Column(Integer, ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False)
     image_path = Column(String(255))
-    prediction = Column(String(100))
+    prediction = Column(EncryptedText(), nullable=True)  # PHI: encrypted at rest
+    confidence = Column(Float, nullable=True)
+    is_low_confidence = Column(Boolean, nullable=True)
+    entropy = Column(Float, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
 
     patient = relationship("Patient", back_populates="lesions")
@@ -131,7 +147,6 @@ class ChatRoom(Base):
     created_at = Column(DateTime, default=_utcnow)
     last_message_at = Column(DateTime, default=_utcnow)
     is_active = Column(Boolean, default=True)
-    video_link = Column(String(500), nullable=True)
     unread_count_patient = Column(Integer, default=0)  # unread count for patient
     unread_count_doctor = Column(Integer, default=0)   # unread count for doctor
 
@@ -236,9 +251,9 @@ class DiagnosisReport(Base):
     report_id = Column(Integer, primary_key=True, index=True)
     lesion_id = Column(Integer, ForeignKey("lesions.lesion_id", ondelete="CASCADE"), nullable=False)
     patient_id = Column(Integer, ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False)
-    prediction = Column(String(100))
-    summary = Column(String(255))
-    details = Column(String(8000))
+    prediction = Column(EncryptedText(), nullable=True)     # PHI: encrypted at rest
+    summary = Column(EncryptedText(), nullable=True)         # PHI: encrypted at rest
+    details = Column(EncryptedText(), nullable=True)         # PHI: encrypted at rest
     created_at = Column(DateTime, default=_utcnow)
 
 
@@ -309,7 +324,7 @@ class UserProfile(Base):
     fitzpatrick_type = Column(Integer) # 1-6
     
     # Context
-    allergies = Column(Text) # JSON list or comma-separated
+    allergies = Column(EncryptedText(), nullable=True)  # PHI: encrypted at rest
     goals = Column(Text) # JSON list: Anti-aging, Hydration, etc.
     location_city = Column(String(100)) # For weather lookup
     
@@ -355,6 +370,8 @@ class RoutineItem(Base):
     time_of_day = Column(String(20), nullable=False) # "AM", "PM", "BOTH"
     step_order = Column(Integer, default=1)
     is_active = Column(Boolean, default=True)
+    notes = Column(Text, nullable=True)  # usage instructions / AI-generated notes
+    brand = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=_utcnow)
     
     user = relationship("User")
@@ -379,9 +396,9 @@ class TreatmentPlan(Base):
     plan_id = Column(Integer, primary_key=True, index=True)
     patient_id = Column(Integer, ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False)
     doctor_id = Column(Integer, ForeignKey("doctors.doctor_id", ondelete="CASCADE"), nullable=False)
-    diagnosis = Column(String(500), nullable=False)
+    diagnosis = Column(EncryptedText(), nullable=False)  # PHI: encrypted at rest
     status = Column(String(20), default="active")  # active | completed | cancelled
-    notes = Column(Text, nullable=True)
+    notes = Column(EncryptedText(), nullable=True)       # PHI: encrypted at rest
     created_at = Column(DateTime, default=_utcnow)
 
     patient = relationship("Patient")
@@ -412,8 +429,8 @@ class TreatmentAdherence(Base):
     step_id = Column(Integer, ForeignKey("treatment_steps.step_id", ondelete="CASCADE"), nullable=False)
     date = Column(DateTime, nullable=False, default=_utcnow)
     taken = Column(Boolean, default=True)
-    side_effects = Column(Text, nullable=True)
-    notes = Column(Text, nullable=True)
+    side_effects = Column(EncryptedText(), nullable=True)  # PHI: encrypted at rest
+    notes = Column(EncryptedText(), nullable=True)         # PHI: encrypted at rest
     created_at = Column(DateTime, default=_utcnow)
 
     step = relationship("TreatmentStep", back_populates="adherence_records")
@@ -433,3 +450,106 @@ class DoctorSuggestion(Base):
 
     report = relationship("DiagnosisReport")
     doctor = relationship("Doctor")
+
+
+# --- Agentic AI: Skin Health Monitor ---
+
+class AgentSession(Base):
+    __tablename__ = "agent_sessions"
+    session_id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False)
+    trigger = Column(String(30), nullable=False)  # "scan" | "manual" | "scheduled"
+    status = Column(String(20), default="running")  # running | completed | failed
+    summary = Column(EncryptedText(), nullable=True)  # PHI: encrypted at rest
+    actions_taken = Column(Text, nullable=True)  # JSON list of action strings
+    prompt_version_id = Column(Integer, ForeignKey("agent_prompt_versions.prompt_version_id"), nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+    patient = relationship("Patient")
+    steps = relationship("AgentStep", back_populates="session", cascade="all, delete-orphan",
+                         order_by="AgentStep.step_order")
+    actions = relationship("AgentAction", back_populates="session", cascade="all, delete-orphan",
+                           order_by="AgentAction.action_id")
+
+
+class AgentStep(Base):
+    __tablename__ = "agent_steps"
+    step_id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("agent_sessions.session_id", ondelete="CASCADE"), nullable=False)
+    step_order = Column(Integer, nullable=False)
+    step_type = Column(String(20), nullable=False)  # "thought" | "tool_call" | "observation" | "answer"
+    tool_name = Column(String(60), nullable=True)
+    tool_input = Column(Text, nullable=True)  # JSON
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=_utcnow)
+
+    session = relationship("AgentSession", back_populates="steps")
+
+
+class AgentAction(Base):
+    """Proposed actions the agent creates for user approval before execution."""
+    __tablename__ = "agent_actions"
+    action_id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("agent_sessions.session_id", ondelete="CASCADE"), nullable=False)
+    action_type = Column(String(50), nullable=False)  # schedule_appointment | create_routine | add_skin_log | set_reminder
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    payload = Column(Text, nullable=True)  # JSON with action-specific data
+    status = Column(String(20), default="proposed")  # proposed | approved | rejected | executed | failed
+    result = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+    executed_at = Column(DateTime, nullable=True)
+
+    session = relationship("AgentSession", back_populates="actions")
+
+
+# --- PHI Access Audit Log (HIPAA-grade audit trail) ---
+
+class PHIAuditLog(Base):
+    """Immutable audit trail for every access/modification of Protected Health Information.
+
+    Covers: agent tool calls, action approvals/rejections/executions,
+    lesion uploads, diagnosis report access, and any PHI query.
+    """
+    __tablename__ = "phi_audit_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True)
+    patient_id = Column(Integer, ForeignKey("patients.patient_id", ondelete="SET NULL"), nullable=True)
+    action = Column(String(120), nullable=False, index=True)  # e.g. "agent.tool_call", "action.approve"
+    resource_type = Column(String(60), nullable=True)   # e.g. "lesion", "diagnosis_report", "agent_session"
+    resource_id = Column(Integer, nullable=True)
+    detail = Column(Text, nullable=True)                 # JSON with extra context
+    ip_address = Column(String(45), nullable=True)
+    created_at = Column(DateTime, default=_utcnow, index=True)
+
+
+# --- Prompt Versioning ---
+
+class AgentPromptVersion(Base):
+    """Versioned system prompts for the ReAct agent."""
+    __tablename__ = "agent_prompt_versions"
+    prompt_version_id = Column(Integer, primary_key=True, index=True)
+    content = Column(Text, nullable=False)
+    description = Column(String(255), nullable=True)
+    is_active = Column(Boolean, default=False, index=True)
+    created_by = Column(Integer, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+
+# --- Agent Session Behavioral Metrics ---
+
+class AgentSessionMetrics(Base):
+    """Behavioral metrics recorded after each agent session for monitoring."""
+    __tablename__ = "agent_session_metrics"
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("agent_sessions.session_id", ondelete="CASCADE"), unique=True, nullable=False)
+    turns_used = Column(Integer, nullable=False)
+    tools_called = Column(Text, nullable=True)            # JSON list
+    required_tools_missed = Column(Text, nullable=True)   # JSON list
+    duplicate_tool_calls = Column(Integer, default=0)
+    timed_out_tools = Column(Text, nullable=True)         # JSON list
+    json_parse_failures = Column(Integer, default=0)
+    write_tools_intercepted = Column(Integer, default=0)
+    final_answer_without_tools = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=_utcnow)

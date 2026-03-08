@@ -142,3 +142,51 @@ def require_roles(*roles: str) -> Callable:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
         return user
     return _dep
+
+
+def verify_patient_access(patient_id: int, user: models.User, db: Session) -> None:
+    """Enforce row-level access: patients own their data, doctors only see linked patients.
+
+    Raises HTTPException(403) if the user has no legitimate access to this patient.
+    Admins bypass all checks.
+    """
+    role = (user.role or "").upper()
+
+    if role == "ADMIN":
+        return  # admins have full access
+
+    if role == "PATIENT":
+        patient = db.query(models.Patient).filter(
+            models.Patient.user_id == user.user_id
+        ).first()
+        if not patient or patient.patient_id != patient_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot access another patient's data",
+            )
+        return
+
+    if role == "DOCTOR":
+        doctor = db.query(models.Doctor).filter(
+            models.Doctor.user_id == user.user_id
+        ).first()
+        if not doctor:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Doctor profile not found",
+            )
+        link = db.query(models.DoctorPatient).filter(
+            models.DoctorPatient.doctor_id == doctor.doctor_id,
+            models.DoctorPatient.patient_id == patient_id,
+        ).first()
+        if not link:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not linked to this patient",
+            )
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Insufficient permissions",
+    )

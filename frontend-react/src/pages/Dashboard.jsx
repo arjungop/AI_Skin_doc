@@ -8,7 +8,7 @@ import WeatherWidget from '../components/dashboard/WeatherWidget'
 import { Card, CardTitle, CardDescription, CardData, IconWrapper, CardBadge } from '../components/Card'
 import {
   LuMapPin, LuScan, LuSparkles, LuActivity, LuArrowRight,
-  LuMessageCircle, LuCalendar, LuHeart, LuTrendingUp, LuZap, LuMail,
+  LuMessageCircle, LuCalendar, LuTrendingUp, LuZap, LuMail,
   LuDroplets, LuStethoscope
 } from 'react-icons/lu'
 
@@ -307,29 +307,6 @@ export default function Dashboard() {
                 </div>
                 <div className="w-14 h-14 rounded-2xl bg-ai-500/10 text-ai-400 flex items-center justify-center group-hover:bg-ai-500/20 group-hover:translate-x-2 transition-all">
                   <LuArrowRight size={24} />
-                </div>
-              </Card>
-            </Link>
-          </motion.div>
-
-          {/* SKIN JOURNEY */}
-          <motion.div variants={item}>
-            <Link to="/journey" className="block h-full">
-              <Card variant="glass" className="h-full flex flex-col justify-between group" hover>
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <IconWrapper variant="primary">
-                      <LuHeart size={22} />
-                    </IconWrapper>
-                    <CardBadge>NEW</CardBadge>
-                  </div>
-                  <CardTitle className="mb-2">Skin Journey</CardTitle>
-                  <CardDescription>
-                    Track your progress and see how far you've come.
-                  </CardDescription>
-                </div>
-                <div className="flex items-center gap-2 text-primary-500 text-sm font-medium mt-4 group-hover:gap-3 transition-all">
-                  View Timeline <LuArrowRight size={16} />
                 </div>
               </Card>
             </Link>

@@ -58,6 +58,7 @@ class AppointmentCreate(BaseModel):
 class AppointmentOut(AppointmentCreate):
     appointment_id: int
     status: str
+    video_link: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -106,6 +107,12 @@ class DoctorOut(BaseModel):
 
     model_config = {"from_attributes": True}
 
+class DoctorPatientListOut(BaseModel):
+    patient_id: int
+    name: str
+    visits: int
+    lastVisit: Optional[datetime] = None
+
 class DoctorApply(BaseModel):
     first_name: str
     last_name: str
@@ -147,7 +154,6 @@ class ChatRoomOut(BaseModel):
     created_at: datetime
     last_message_at: datetime
     is_active: bool
-    video_link: Optional[str] = None
     unread_count_patient: int
     unread_count_doctor: int
     patient: Optional[dict] = None
@@ -363,4 +369,48 @@ class DoctorSuggestionOut(BaseModel):
     product_link: Optional[str] = None
     notes: Optional[str] = None
     created_at: datetime
+    model_config = {"from_attributes": True}
+
+
+# ── Agentic AI Schemas ───────────────────────────────────────────────────
+
+class AgentRunRequest(BaseModel):
+    patient_id: int
+    lesion_id: Optional[int] = None  # if triggered by a new scan
+
+class AgentStepOut(BaseModel):
+    step_id: int
+    step_order: int
+    step_type: str
+    tool_name: Optional[str] = None
+    content: str
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+class AgentActionOut(BaseModel):
+    action_id: int
+    action_type: str
+    title: str
+    description: Optional[str] = None
+    status: str
+    result: Optional[str] = None
+    created_at: datetime
+    executed_at: Optional[datetime] = None
+    model_config = {"from_attributes": True}
+
+class AgentActionApproval(BaseModel):
+    approved: bool
+
+class AgentSessionOut(BaseModel):
+    session_id: int
+    patient_id: int
+    trigger: str
+    status: str
+    summary: Optional[str] = None
+    actions_taken: Optional[str] = None
+    prompt_version_id: Optional[int] = None
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+    steps: list[AgentStepOut] = []
+    actions: list[AgentActionOut] = []
     model_config = {"from_attributes": True}

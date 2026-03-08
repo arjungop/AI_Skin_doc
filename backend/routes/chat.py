@@ -12,6 +12,15 @@ from backend.notify import NotificationHub
 router = APIRouter()
 
 
+def _as_aware(dt):
+    """Return a timezone-aware datetime for safe comparison, regardless of input type."""
+    if dt is None:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 # ── Helpers ──────────────────────────────────────────────────────────────
 
 def _authorize_room_access(db: Session, user: models.User, room_id: int) -> models.ChatRoom:
@@ -79,7 +88,6 @@ def _populate_room_data(room: models.ChatRoom, db: Session, *, prefetched_patien
         "created_at": room.created_at,
         "last_message_at": room.last_message_at,
         "is_active": room.is_active,
-        "video_link": getattr(room, 'video_link', None),
         "unread_count_patient": getattr(room, 'unread_count_patient', 0),
         "unread_count_doctor": getattr(room, 'unread_count_doctor', 0),
         "patient": {
@@ -164,7 +172,7 @@ def _populate_message_data(message: models.Message, db: Session, *, prefetched_u
 
 # ── Rooms ────────────────────────────────────────────────────────────────
 
-@router.get("/rooms", response_model=List[dict])
+@router.get("/rooms")
 def list_rooms(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
@@ -176,13 +184,16 @@ def list_rooms(
 
     if role == "ADMIN":
         rooms = query.all()
-    elif patient:
+    elif role == "DOCTOR" and doctor:
+        rooms = query.filter(models.ChatRoom.doctor_id == doctor.doctor_id).all()
+    elif role == "PATIENT" and patient:
         rooms = query.filter(models.ChatRoom.patient_id == patient.patient_id).all()
     elif doctor:
         rooms = query.filter(models.ChatRoom.doctor_id == doctor.doctor_id).all()
+    elif patient:
+        rooms = query.filter(models.ChatRoom.patient_id == patient.patient_id).all()
     else:
         return []
-
     result = []
     if rooms:
         # Batch load patients and doctors to avoid N+1 queries
@@ -193,7 +204,7 @@ def list_rooms(
         prefetched_patients = {p.patient_id: p for p in patients_list}
         prefetched_doctors = {d.doctor_id: d for d in doctors_list}
         result = [_populate_room_data(r, db, prefetched_patients=prefetched_patients, prefetched_doctors=prefetched_doctors) for r in rooms]
-    result.sort(key=lambda x: x["last_message_at"] or datetime.min, reverse=True)
+    result.sort(key=lambda x: _as_aware(x["last_message_at"]), reverse=True)
     return result
 
 
@@ -240,28 +251,6 @@ def create_room(
     db.commit()
 
     return _populate_room_data(room, db)
-
-
-@router.put("/rooms/{room_id}/video-link")
-def set_video_link(
-    room_id: int,
-    body: schemas.VideoLinkUpdate,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user),
-):
-    """Set or clear a video consultation link on a room (doctors/admins only)."""
-    room = _authorize_room_access(db, user, room_id)
-    role = (user.role or "").upper()
-
-    if role not in ("DOCTOR", "ADMIN"):
-        raise HTTPException(403, "Only doctors can set video links")
-
-    room.video_link = body.video_link
-    _audit(db, user.user_id, "video_link_set", f"room_id={room_id} link={body.video_link}")
-    db.commit()
-
-    return {"status": "ok", "video_link": room.video_link}
-
 
 # ── Messages ─────────────────────────────────────────────────────────────
 

@@ -39,6 +39,22 @@ export default function Register() {
       setMsg('Password must be at least 8 characters')
       return
     }
+    if (!/[A-Z]/.test(form.password)) {
+      setMsg('Password must contain at least one uppercase letter')
+      return
+    }
+    if (!/[a-z]/.test(form.password)) {
+      setMsg('Password must contain at least one lowercase letter')
+      return
+    }
+    if (!/[0-9]/.test(form.password)) {
+      setMsg('Password must contain at least one digit')
+      return
+    }
+    if (!/[!@#$%^&*(),.?":{}|<>_\-+=[\]\\;'/`~]/.test(form.password)) {
+      setMsg('Password must contain at least one special character (e.g. @, #, $)')
+      return
+    }
     const age = parseInt(form.age)
     if (isNaN(age) || age < 1 || age > 120) {
       setMsg('Please enter a valid age between 1 and 120')

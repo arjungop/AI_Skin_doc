@@ -98,7 +98,7 @@ export default function Chat() {
     abortRef.current = controller
 
     try {
-      const history = messages.map(m => ({ role: m.who === 'You' ? 'user' : 'assistant', content: m.text }))
+      const history = messages.slice(-8).map(m => ({ role: m.who === 'You' ? 'user' : 'assistant', content: m.text }))
       if ((status || '').toLowerCase() === 'ollama') {
         const res = await api.chat({ patient_id: chatUserId, prompt: msg.content, history })
         setMessages(prev => [...prev, { who: 'AI', text: res.reply || '(no response)' }])
@@ -190,7 +190,7 @@ export default function Chat() {
                 <h1 className="font-bold text-slate-900">Medical Assistant</h1>
                 <p className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  Online • {status || 'Gemini'}
+                  Online
                 </p>
               </div>
             </div>

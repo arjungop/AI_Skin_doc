@@ -4,6 +4,7 @@ import { useToast } from '../components/Toast.jsx'
 import { motion } from 'framer-motion'
 import { LuCalendarPlus, LuClock, LuCheck, LuX, LuArrowRight, LuTriangleAlert, LuUser } from 'react-icons/lu'
 import { Card, CardTitle, CardDescription, IconWrapper, CardBadge } from '../components/Card'
+import ConfirmModal from '../components/ConfirmModal.jsx'
 
 export default function Appointments() {
   const [list, setList] = useState([])
@@ -20,6 +21,7 @@ export default function Appointments() {
   const { push } = useToast()
   const [availability, setAvailability] = useState([])
   const [loading, setLoading] = useState(false)
+  const [cancelTarget, setCancelTarget] = useState(null)
 
   const container = {
     hidden: { opacity: 0 },
@@ -43,6 +45,9 @@ export default function Appointments() {
     const avail = availability.filter(a => a.weekday === ((weekday + 6) % 7))
     const dur = 30
     const s = []
+    const now = new Date()
+    const isToday = d.toDateString() === now.toDateString()
+
     for (const a of avail) {
       let [h1, m1] = a.start_time.split(':').map(Number)
       let [h2, m2] = a.end_time.split(':').map(Number)
@@ -50,6 +55,14 @@ export default function Appointments() {
       for (let t = t1; t + dur <= t2; t += dur) {
         const hh = String(Math.floor(t / 60)).padStart(2, '0')
         const mm = String(t % 60).padStart(2, '0')
+
+        // Skip past slots if booking today
+        if (isToday) {
+          const slotTime = new Date(now)
+          slotTime.setHours(parseInt(hh, 10), parseInt(mm, 10), 0, 0)
+          if (slotTime < now) continue
+        }
+
         s.push(`${hh}:${mm}`)
       }
     }
@@ -64,8 +77,7 @@ export default function Appointments() {
     setLoading(true)
     try {
       let data = await api.listAppointments()
-      if (role === 'DOCTOR' && did) data = data.filter(a => a.doctor_id === did)
-      else if (pid) data = data.filter(a => a.patient_id === pid)
+      if (pid) data = data.filter(a => a.patient_id === pid)
       setList(data || [])
       const docs = await api.listDoctors()
       setDoctors(docs || [])
@@ -121,108 +133,105 @@ export default function Appointments() {
         </motion.header>
 
         {/* Booking Form Card */}
-        {role === 'PATIENT' && (
-          <motion.section variants={item} id="book-form">
-            <Card className="p-8" hover={false}>
-              <div className="flex items-center gap-3 mb-6">
-                <IconWrapper variant="primary" className="bg-primary-50 text-primary-600">
-                  <LuCalendarPlus size={20} />
-                </IconWrapper>
-                <CardTitle className="text-xl">Book a Consultation</CardTitle>
+        <motion.section variants={item} id="book-form">
+          <Card className="p-8" hover={false}>
+            <div className="flex items-center gap-3 mb-6">
+              <IconWrapper variant="primary" className="bg-primary-50 text-primary-600">
+                <LuCalendarPlus size={20} />
+              </IconWrapper>
+              <CardTitle className="text-xl">Book a Consultation</CardTitle>
+            </div>
+
+            <form onSubmit={submit} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Select Doctor</label>
+                  <select
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                    value={doctorId}
+                    onChange={e => setDoctorId(e.target.value)}
+                    required
+                  >
+                    <option value="" disabled>Choose a specialist...</option>
+                    {doctors.map(d => (
+                      <option key={d.doctor_id} value={d.doctor_id}>{d.username} {d.specialization ? `(${d.specialization})` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Date</label>
+                  <input
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                    type="date"
+                    value={date}
+                    onChange={e => setDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Reason</label>
+                  <input
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 placeholder:text-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                    placeholder="e.g. Skin rash, Checkup..."
+                    value={reason}
+                    onChange={e => setReason(e.target.value)}
+                  />
+                </div>
               </div>
 
-              <form onSubmit={submit} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Select Doctor</label>
-                    <select
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all"
-                      value={doctorId}
-                      onChange={e => setDoctorId(e.target.value)}
-                      required
-                    >
-                      <option value="" disabled>Choose a specialist...</option>
-                      {doctors.map(d => (
-                        <option key={d.doctor_id} value={d.doctor_id}>{d.username} {d.specialization ? `(${d.specialization})` : ''}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Date</label>
-                    <input
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all"
-                      type="date"
-                      value={date}
-                      onChange={e => setDate(e.target.value)}
-                      min={new Date().toISOString().split('T')[0]}
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Reason</label>
-                    <input
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 placeholder:text-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all"
-                      placeholder="e.g. Skin rash, Checkup..."
-                      value={reason}
-                      onChange={e => setReason(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                {/* Slots Grid */}
-                <div className="bg-slate-50/50 rounded-2xl p-6 border border-slate-100">
-                  <label className="text-sm font-semibold text-slate-500 uppercase tracking-wider block mb-4">Available Slots</label>
-                  {date && slots.length > 0 ? (
-                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
-                      {slots.map(s => {
-                        const isTaken = bookedSlots.includes(s)
-                        const isSelected = selectedSlot === s
-                        return (
-                          <button
-                            type="button"
-                            key={s}
-                            disabled={isTaken}
-                            onClick={() => !isTaken && setSelectedSlot(s)}
-                            title={isTaken ? 'Already booked' : s}
-                            className={`py-2.5 px-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5 ${
-                              isTaken
-                                ? 'bg-slate-100 border border-slate-200 text-slate-300 cursor-not-allowed line-through'
-                                : isSelected
-                                  ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/30 scale-105'
-                                  : 'bg-white border border-slate-200 text-slate-600 hover:border-primary-300 hover:text-primary-600'
+              {/* Slots Grid */}
+              <div className="bg-slate-50/50 rounded-2xl p-6 border border-slate-100">
+                <label className="text-sm font-semibold text-slate-500 uppercase tracking-wider block mb-4">Available Slots</label>
+                {date && slots.length > 0 ? (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                    {slots.map(s => {
+                      const isTaken = bookedSlots.includes(s)
+                      const isSelected = selectedSlot === s
+                      return (
+                        <button
+                          type="button"
+                          key={s}
+                          disabled={isTaken}
+                          onClick={() => !isTaken && setSelectedSlot(s)}
+                          title={isTaken ? 'Already booked' : s}
+                          className={`py-2.5 px-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5 ${isTaken
+                            ? 'bg-slate-100 border border-slate-200 text-slate-300 cursor-not-allowed line-through'
+                            : isSelected
+                              ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/30 scale-105'
+                              : 'bg-white border border-slate-200 text-slate-600 hover:border-primary-300 hover:text-primary-600'
                             }`}
-                          >
-                            <LuClock size={12} className={isTaken ? 'opacity-30' : isSelected ? 'opacity-70' : 'text-slate-400'} />
-                            {s}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-slate-400 flex flex-col items-center">
-                      <LuTriangleAlert className="mb-2 text-2xl opacity-40" />
-                      {date ? 'No slots available for this date.' : 'Please select a doctor and date first.'}
-                    </div>
-                  )}
-                </div>
+                        >
+                          <LuClock size={12} className={isTaken ? 'opacity-30' : isSelected ? 'opacity-70' : 'text-slate-400'} />
+                          {s}
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-slate-400 flex flex-col items-center">
+                    <LuTriangleAlert className="mb-2 text-2xl opacity-40" />
+                    {date ? 'No slots available for this date.' : 'Please select a doctor and date first.'}
+                  </div>
+                )}
+              </div>
 
-                <div className="flex justify-end">
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="btn-primary px-8 py-3 text-lg disabled:opacity-50"
-                    type="submit"
-                    disabled={submitting}
-                  >
-                    {submitting ? 'Booking...' : 'Confirm Booking'} {!submitting && <LuArrowRight className="inline ml-2" size={18} />}
-                  </motion.button>
-                </div>
-              </form>
-            </Card>
-          </motion.section>
-        )}
+              <div className="flex justify-end">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="btn-primary px-8 py-3 text-lg disabled:opacity-50"
+                  type="submit"
+                  disabled={submitting}
+                >
+                  {submitting ? 'Booking...' : 'Confirm Booking'} {!submitting && <LuArrowRight className="inline ml-2" size={18} />}
+                </motion.button>
+              </div>
+            </form>
+          </Card>
+        </motion.section>
 
         {/* Appointment List */}
         <motion.section variants={item}>
@@ -273,24 +282,10 @@ export default function Appointments() {
                           <StatusBadge status={a.status} />
                         </td>
                         <td className="p-6 text-right space-x-2">
-                          {role === 'PATIENT' && ['Scheduled', 'Confirmed'].includes(a.status) && !isPast && (
-                            <button className="px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors border border-rose-100" onClick={async () => { await api.updateAppointmentStatus(a.appointment_id, 'Cancelled'); load() }}>
+                          {['Scheduled', 'Confirmed'].includes(a.status) && !isPast && (
+                            <button className="px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors border border-rose-100" onClick={() => setCancelTarget(a)}>
                               Cancel
                             </button>
-                          )}
-
-                          {role === 'DOCTOR' && (
-                            <>
-                              {a.status === 'Scheduled' && (
-                                <button className="btn-ghost text-xs px-3" onClick={async () => { await api.updateAppointmentStatus(a.appointment_id, 'Confirmed'); load() }}>Confirm</button>
-                              )}
-                              {['Scheduled', 'Confirmed'].includes(a.status) && (
-                                <button className="btn-ghost text-xs text-rose-500 hover:bg-rose-50 px-3" onClick={async () => { await api.updateAppointmentStatus(a.appointment_id, 'Cancelled'); load() }}>Cancel</button>
-                              )}
-                              {['Scheduled', 'Confirmed'].includes(a.status) && (
-                                <button className="btn-primary text-xs px-3 py-1.5" onClick={async () => { await api.updateAppointmentStatus(a.appointment_id, 'Completed'); load() }}>Complete</button>
-                              )}
-                            </>
                           )}
                         </td>
                       </tr>
@@ -302,6 +297,33 @@ export default function Appointments() {
           </Card>
         </motion.section>
       </motion.div>
+
+      {/* Cancel confirmation modal */}
+      <ConfirmModal
+        open={!!cancelTarget}
+        title="Cancel Appointment?"
+        confirmText="Yes, Cancel Appointment"
+        cancelText="Go Back"
+        onClose={() => setCancelTarget(null)}
+        onConfirm={async () => {
+          if (!cancelTarget) return
+          try {
+            await api.updateAppointmentStatus(cancelTarget.appointment_id, 'Cancelled')
+            push('Appointment cancelled', 'success')
+          } catch (err) {
+            push(err.message || 'Failed to cancel', 'error')
+          }
+          setCancelTarget(null)
+          load()
+        }}
+      >
+        <div className="space-y-2">
+          <p className="text-slate-600">Are you sure you want to cancel your appointment on <strong>{cancelTarget ? new Date(cancelTarget.appointment_date).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : ''}</strong>?</p>
+          {cancelTarget?.status === 'Confirmed' && (
+            <p className="text-sm font-medium text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">This appointment has already been confirmed by your doctor. Cancellations within 2 hours of the appointment are not allowed.</p>
+          )}
+        </div>
+      </ConfirmModal>
     </div>
   )
 }

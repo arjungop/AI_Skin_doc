@@ -558,13 +558,15 @@ class EMA:
 def evaluate(model, loader, device) -> float:
     model.eval()
     correct = total = 0
-    for imgs, labels in loader:
+    bar = tqdm(loader, desc="Validating", leave=False)
+    for imgs, labels in bar:
         imgs, labels = imgs.to(device), labels.to(device)
         with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16,
                                 enabled=device.type == "cuda"):
             logits = model(imgs)
         correct += (logits.argmax(1) == labels).sum().item()
         total   += len(labels)
+        bar.set_postfix(acc=f"{100*correct/max(1,total):.1f}%")
     return 100.0 * correct / max(1, total)
 
 
@@ -609,7 +611,10 @@ def main():
     parser.add_argument("--output-name",type=str,   default="finetuned_smartphone.pth")
     parser.add_argument("--skip-download", action="store_true",
                         help="Skip dataset download (data already in data-dir)")
-    parser.add_argument("--num-workers", type=int,  default=4)
+    parser.add_argument("--resume", action="store_true",
+                        help="Resume from checkpoints/resume.pth if it exists")
+    parser.add_argument("--num-workers", type=int,  default=4,
+                        help="DataLoader workers (auto-set to 0 on MPS)")
     parser.add_argument("--unfreeze-stages", type=int, nargs="+", default=[2, 3],
                         choices=[0, 1, 2, 3],
                         help="ConvNeXt stage indices to unfreeze (0-3). Default: 2 3")
@@ -684,14 +689,16 @@ def main():
     train_ds = SmartphoneDataset(train_samples, get_train_transform(cfg.img_size))
     val_ds   = SmartphoneDataset(val_samples,   get_val_transform(cfg.img_size))
 
+    pin = device.type == "cuda"  # pin_memory only benefits CUDA, hurts MPS
+    nw  = cfg.num_workers if device.type == "cuda" else 0  # MPS: workers cause overhead
     train_loader = DataLoader(
         train_ds, batch_size=cfg.batch_size, sampler=sampler,
-        num_workers=cfg.num_workers, pin_memory=True,
-        persistent_workers=cfg.num_workers > 0,
+        num_workers=nw, pin_memory=pin,
+        persistent_workers=nw > 0,
     )
     val_loader = DataLoader(
         val_ds, batch_size=cfg.batch_size * 2, shuffle=False,
-        num_workers=cfg.num_workers, pin_memory=True,
+        num_workers=nw, pin_memory=pin,
     )
 
     # ── Optimizer — only trainable params ──
@@ -723,11 +730,29 @@ def main():
     log.info("=" * 60)
 
     best_val_acc = 0.0
+    start_epoch  = 0
     out_dir = Path(cfg.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    best_path = out_dir / cfg.output_name
+    best_path   = out_dir / cfg.output_name
+    resume_path = out_dir / "resume.pth"
 
-    for epoch in range(cfg.epochs):
+    if args.resume and resume_path.exists():
+        log.info("=" * 60)
+        log.info("RESUMING from %s", resume_path)
+        resume_ckpt = torch.load(str(resume_path), map_location=device, weights_only=False)
+        model.load_state_dict(resume_ckpt["model_state_dict"])
+        optimizer.load_state_dict(resume_ckpt["optimizer_state_dict"])
+        scheduler.load_state_dict(resume_ckpt["scheduler_state_dict"])
+        ema.shadow = {k: v.float() for k, v in resume_ckpt["ema_state_dict"].items()}
+        start_epoch  = resume_ckpt["epoch"] + 1
+        best_val_acc = resume_ckpt["best_val_acc"]
+        log.info("  Continuing from epoch %d/%d  (best val so far: %.2f%%)",
+                 start_epoch, cfg.epochs, best_val_acc)
+        log.info("=" * 60)
+    elif args.resume:
+        log.warning("--resume set but %s not found — starting fresh", resume_path)
+
+    for epoch in range(start_epoch, cfg.epochs):
         loss, train_acc = train_one_epoch(
             model, train_loader, criterion, optimizer, scaler, device, epoch, cfg.epochs
         )
@@ -770,6 +795,17 @@ def main():
             }
             torch.save(save_ckpt, best_path)
             log.info("  ✅ Saved best checkpoint → %s  (val %.2f%%)", best_path, best_val_acc)
+
+        # Always save resume checkpoint after every epoch (crash recovery)
+        torch.save({
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "scheduler_state_dict": scheduler.state_dict(),
+            "ema_state_dict": ema.shadow,
+            "best_val_acc": best_val_acc,
+            "classes": classes,
+        }, resume_path)
 
     log.info("=" * 60)
     log.info("DONE  |  Best val acc: %.2f%%", best_val_acc)

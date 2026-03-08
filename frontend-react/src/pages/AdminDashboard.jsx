@@ -2,6 +2,13 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { api } from '../services/api'
 import ConfirmModal from '../components/ConfirmModal.jsx'
 import { useToast } from '../components/Toast.jsx'
+import { motion, AnimatePresence } from 'framer-motion'
+import {
+  LuUsers, LuStethoscope,
+  LuSettings, LuHistory, LuCheck, LuX, LuBan, LuSearch,
+  LuDownload, LuFileText, LuShield, LuRefreshCw, LuChevronLeft, LuChevronRight
+} from 'react-icons/lu'
+import { Card, CardTitle, CardDescription } from '../components/Card.jsx'
 
 export default function AdminDashboard() {
   const [overview, setOverview] = useState(null)
@@ -40,8 +47,8 @@ export default function AdminDashboard() {
 
   const { push } = useToast()
 
-  useEffect(() => { (async () => { try { setOverview(await api.adminOverview()) } catch(err) { push(err?.message || 'Failed to load overview', 'error') } })() }, [])
-  async function refreshOverview() { try { setOverview(await api.adminOverview()) } catch(err) { push(err?.message || 'Failed to refresh overview', 'error') } }
+  useEffect(() => { (async () => { try { setOverview(await api.adminOverview()) } catch (err) { push(err?.message || 'Failed to load overview', 'error') } })() }, [])
+  async function refreshOverview() { try { setOverview(await api.adminOverview()) } catch (err) { push(err?.message || 'Failed to refresh overview', 'error') } }
 
   async function loadApps(p = appsPage) {
     const res = await api.adminListDoctorAppsPaged({ status: appsStatus || undefined, q: appsQ || undefined, page: p, page_size: 20 })
@@ -79,19 +86,20 @@ export default function AdminDashboard() {
     try {
       if (what === 'approve') await api.adminApproveDoctor(id)
       else await api.adminRejectDoctor(id)
+      push(`Application ${what}d successfully`, 'success')
       setConfirmAction({ open: false, id: null, what: '' })
       await loadApps()
-    } catch (e) { alert(e.message) }
+    } catch (e) { push(e.message, 'error') }
   }
 
   async function exportApps() {
     try {
-      const BASE = import.meta.env.VITE_API_URL || '/api'
+      const BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
       const params = new URLSearchParams()
       if (appsStatus) params.set('status', appsStatus)
       if (appsQ) params.set('q', appsQ)
-      const resp = await fetch(`${BASE}/admin/doctor-applications/export?${params}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      const resp = await fetch(`${BASE}/admin/doctor_applications/export.csv?${params}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` },
       })
       if (!resp.ok) throw new Error('Export failed')
       const blob = await resp.blob()
@@ -103,255 +111,386 @@ export default function AdminDashboard() {
       a.click()
       a.remove()
       URL.revokeObjectURL(url)
-    } catch (e) { alert(e.message) }
+    } catch (e) { push(e.message, 'error') }
   }
 
-  // Role changes are handled via Applications approval; no direct role changes here per requirements.
-  async function doSuspend() { if (!suspend.user) return; const status = (suspend.user.status === 'SUSPENDED') ? 'ACTIVE' : 'SUSPENDED'; await api.adminUpdateUserStatus(suspend.user.user_id, status); setSuspend({ open: false, user: null }); loadUsers() }
-  async function doTerminate() { if (!terminate.user) return; await api.adminTerminateUser(terminate.user.user_id, terminate.reason_code, terminate.reason_text); setTerminate({ open: false, user: null, reason_code: 'REQUEST', reason_text: '' }); loadUsers() }
+  async function doSuspend() {
+    if (!suspend.user) return;
+    const status = (suspend.user.status === 'SUSPENDED') ? 'ACTIVE' : 'SUSPENDED';
+    try {
+      await api.adminUpdateUserStatus(suspend.user.user_id, status);
+      push(`User ${status.toLowerCase()}`, 'success');
+    } catch (e) {
+      push(e?.message, 'error');
+    }
+    setSuspend({ open: false, user: null });
+    loadUsers();
+  }
 
-  async function saveSettings(e) { e.preventDefault(); const form = new FormData(e.target); const obj = {}; for (const [k, v] of form.entries()) { obj[k] = v }; await api.adminSetSettings(obj); loadSettings() }
+  async function doTerminate() {
+    if (!terminate.user) return;
+    try {
+      await api.adminTerminateUser(terminate.user.user_id, terminate.reason_code, terminate.reason_text);
+      push('User terminated successfully', 'success');
+    } catch (e) {
+      push(e?.message, 'error');
+    }
+    setTerminate({ open: false, user: null, reason_code: 'REQUEST', reason_text: '' });
+    loadUsers();
+  }
+
+  async function saveSettings(e) {
+    e.preventDefault();
+    const form = new FormData(e.target);
+    const obj = {};
+    for (const [k, v] of form.entries()) { obj[k] = v };
+    try {
+      await api.adminSetSettings(obj);
+      push('Settings saved', 'success');
+    } catch (err) {
+      push(err?.message, 'error');
+    }
+    loadSettings();
+  }
+
+  const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } }
+  const item = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }
 
   return (
-    <div>
-      <div className="row mb-4" style={{ justifyContent: 'space-between' }}>
-        <h1 className="text-2xl font-semibold">Admin</h1>
-        <div className="row">
-          <button className={"btn-ghost " + (tab === 'apps' ? 'underline' : '')} onClick={() => setTab('apps')}>Applications</button>
-          <button className={"btn-ghost " + (tab === 'users' ? 'underline' : '')} onClick={() => setTab('users')}>Users</button>
-          <button className={"btn-ghost " + (tab === 'doctors' ? 'underline' : '')} onClick={() => setTab('doctors')}>Doctors</button>
-          <button className={"btn-ghost " + (tab === 'settings' ? 'underline' : '')} onClick={() => setTab('settings')}>Settings</button>
-          <button className={"btn-ghost " + (tab === 'audit' ? 'underline' : '')} onClick={() => setTab('audit')}>Audit Log</button>
-        </div>
-      </div>
+    <div className="pb-12">
+      <header className="mb-8 p-1">
+        <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
+          <LuShield className="text-indigo-500" /> Admin Portal
+        </h1>
+        <p className="text-slate-500 mt-2 max-w-2xl">Manage users, review doctor applications, audit logs, and configure system settings directly from the administrative dashboard.</p>
+      </header>
 
       {overview ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
+        <motion.div variants={container} initial="hidden" animate="show" className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
           {Object.entries(overview).map(([k, v]) => (
-            <div key={k} className="card">
-              <div className="muted text-sm capitalize">{k.replace('_', ' ')}</div>
-              <div className="text-2xl font-semibold">{v}</div>
-            </div>
+            <motion.div key={k} variants={item}>
+              <Card className="p-5 flex flex-col justify-center h-full border border-slate-200/60 shadow-soft-sm" hover={true}>
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{k.replace('_', ' ')}</div>
+                <div className="text-2xl font-bold text-slate-800">{v}</div>
+              </Card>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       ) : (
-        <div className="card">Loading metrics…</div>
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-8 animate-pulse">
+          {[...Array(6)].map((_, i) => <Card key={i} className="p-5 h-[88px] bg-slate-100/50 border-none shadow-none" hover={false} />)}
+        </div>
       )}
 
-      {tab === 'apps' && (
-        <div className="card">
-          <div className="row" style={{ justifyContent: 'space-between' }}>
-            <div className="row">
-              <h3 className="text-lg font-semibold">Doctor Applications</h3>
-              <span className="chip">{appsTotal} total</span>
-            </div>
-            <div className="row">
-              <input placeholder="Search name/email" value={appsQ} onChange={e => setAppsQ(e.target.value)} />
-              <select value={appsStatus} onChange={e => setAppsStatus(e.target.value)}>
-                <option value="">All</option>
-                <option value="PENDING">Pending</option>
-                <option value="APPROVED">Approved</option>
-                <option value="REJECTED">Rejected</option>
-              </select>
-              <a className="btn btn-secondary btn-sm" onClick={exportApps}>Export CSV</a>
-            </div>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table>
-              <thead className="sticky top-0 bg-white"><tr><th>ID</th><th>Name</th><th>Email</th><th>Specialization</th><th>License</th><th>Department</th><th>Status</th><th>Actions</th></tr></thead>
-              <tbody>
-                {apps.map(a => (
-                  <tr key={a.application_id}>
-                    <td>{a.application_id}</td>
-                    <td>{(a.first_name || '') + ' ' + (a.last_name || '')}</td>
-                    <td>{a.email}</td>
-                    <td>{a.specialization || '-'}</td>
-                    <td>{a.license_no || '-'}</td>
-                    <td>{a.department || '-'}</td>
-                    <td><span className="chip">{a.status}</span></td>
-                    <td>
-                      {a.status === 'PENDING' && (
-                        <div className="row">
-                          <button className="btn btn-success btn-sm text-white" onClick={() => setConfirmAction({ open: true, id: a.application_id, what: 'approve' })}>Approve</button>
-                          <button className="btn btn-danger btn-sm text-white" onClick={() => setConfirmAction({ open: true, id: a.application_id, what: 'reject' })}>Reject</button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="row mt-2" style={{ justifyContent: 'space-between' }}>
-            <div className="muted">Page {appsPage} of {appsMax}</div>
-            <div className="row">
-              <button className="btn btn-secondary btn-sm" disabled={appsPage <= 1} onClick={() => loadApps(appsPage - 1)}>Prev</button>
-              <button className="btn btn-secondary btn-sm" disabled={appsPage >= appsMax} onClick={() => loadApps(appsPage + 1)}>Next</button>
-            </div>
-          </div>
-          <ConfirmModal
-            open={confirmAction.open}
-            title={`Confirm ${confirmAction.what === 'approve' ? 'Approval' : 'Rejection'}`}
-            onClose={() => setConfirmAction({ open: false, id: null, what: '' })}
-            onConfirm={() => act(confirmAction.id, confirmAction.what)}
-            confirmText={confirmAction.what === 'approve' ? 'Approve' : 'Reject'}
+      {/* Tabs Layout */}
+      <div className="flex overflow-x-auto hide-scrollbar gap-2 p-1 bg-slate-100/80 rounded-2xl border border-slate-200/60 shadow-inner w-fit mb-6">
+        {[
+          { id: 'apps', label: 'Applications', icon: LuFileText },
+          { id: 'users', label: 'Users', icon: LuUsers },
+          { id: 'doctors', label: 'Doctors', icon: LuStethoscope },
+          { id: 'settings', label: 'Settings', icon: LuSettings },
+          { id: 'audit', label: 'Audit Log', icon: LuHistory },
+        ].map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary-500/20 ${tab === t.id
+              ? 'bg-white text-primary-600 shadow-sm border border-slate-200/60'
+              : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/50'
+              }`}
           >
-            <div className="text-sm">Are you sure you want to {confirmAction.what} this doctor application? This action will be logged.</div>
-          </ConfirmModal>
-        </div>
-      )}
+            <t.icon size={16} /> {t.label}
+          </button>
+        ))}
+      </div>
 
-      {tab === 'users' && (
-        <div className="card">
-          <div className="row" style={{ justifyContent: 'space-between' }}>
-            <h3 className="text-lg font-semibold">Users</h3>
-            <div className="row">
-              <input placeholder="Search username/email" value={usersQ} onChange={e => setUsersQ(e.target.value)} />
-              <select value={usersRole} onChange={e => setUsersRole(e.target.value)}>
-                <option value="">All roles</option>
-                <option value="ADMIN">ADMIN</option>
-                <option value="DOCTOR">DOCTOR</option>
-                <option value="PATIENT">PATIENT</option>
-                <option value="PENDING_DOCTOR">PENDING_DOCTOR</option>
-              </select>
-            </div>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table>
-              <thead><tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Actions</th></tr></thead>
-              <tbody>
-                {users.map(u => (
-                  <tr key={u.user_id}>
-                    <td>{u.user_id}</td>
-                    <td>{u.username}</td>
-                    <td>{u.email}</td>
-                    <td><span className="chip">{u.role}</span></td>
-                    <td>
-                      <div className="row">
-                        <button className="btn btn-ghost btn-sm" onClick={() => setSuspend({ open: true, user: u })}>Suspend/Unsuspend</button>
-                        <button className="btn btn-danger btn-sm text-white" onClick={() => setTerminate({ open: true, user: u, reason_code: 'REQUEST', reason_text: '' })}>Terminate</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="row mt-2" style={{ justifyContent: 'space-between' }}>
-            <div className="muted">Page {usersPage} of {usersMax}</div>
-            <div className="row">
-              <button className="btn btn-secondary btn-sm" disabled={usersPage <= 1} onClick={() => loadUsers(usersPage - 1)}>Prev</button>
-              <button className="btn btn-secondary btn-sm" disabled={usersPage >= usersMax} onClick={() => loadUsers(usersPage + 1)}>Next</button>
-            </div>
-          </div>
-          <ConfirmModal open={suspend.open} title={suspend.user ? `Confirm ${suspend?.user?.status === 'SUSPENDED' ? 'Unsuspend' : 'Suspend'} ${suspend.user.username}` : ''} onClose={() => setSuspend({ open: false, user: null })} onConfirm={doSuspend} confirmText="Confirm">
-            <div className="text-sm">This will {suspend?.user?.status === 'SUSPENDED' ? 'reactivate' : 'temporarily block'} the account. Are you sure?</div>
-          </ConfirmModal>
-          <ConfirmModal open={terminate.open} title={terminate.user ? `Terminate ${terminate.user.username}` : ''} onClose={() => setTerminate({ open: false, user: null, reason_code: 'REQUEST', reason_text: '' })} onConfirm={doTerminate} confirmText="Terminate">
-            <div className="grid gap-2">
-              <label className="text-sm">Reason code</label>
-              <select value={terminate.reason_code} onChange={e => setTerminate({ ...terminate, reason_code: e.target.value })}>
-                <option value="REQUEST">REQUEST</option>
-                <option value="ABUSE">ABUSE</option>
-                <option value="FRAUD">FRAUD</option>
-                <option value="OTHER">OTHER</option>
-              </select>
-              <label className="text-sm">Details (optional)</label>
-              <input value={terminate.reason_text} onChange={e => setTerminate({ ...terminate, reason_text: e.target.value })} placeholder="Add context" />
-              <div className="muted">Appointments after today will be cancelled automatically. This action is logged.</div>
-            </div>
-          </ConfirmModal>
-        </div>
-      )}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={tab}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.98 }}
+          transition={{ duration: 0.2 }}
+        >
+          {/* Applications Tab */}
+          {tab === 'apps' && (
+            <Card className="overflow-hidden border border-slate-200/60 shadow-soft-md">
+              <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">Doctor Applications <span className="bg-primary-50 text-primary-600 text-xs px-2 py-0.5 rounded-full">{appsTotal}</span></h3>
+                  <p className="text-sm text-slate-500">Review pending doctors to grant them platform access.</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <LuSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input className="input pl-9 w-full md:w-64 text-sm bg-slate-50" placeholder="Search name/email" value={appsQ} onChange={e => setAppsQ(e.target.value)} />
+                  </div>
+                  <select className="input text-sm bg-slate-50 font-medium cursor-pointer" value={appsStatus} onChange={e => setAppsStatus(e.target.value)}>
+                    <option value="">All Statuses</option>
+                    <option value="PENDING">Pending</option>
+                    <option value="APPROVED">Approved</option>
+                    <option value="REJECTED">Rejected</option>
+                  </select>
+                  <button className="btn-secondary whitespace-nowrap text-sm flex items-center gap-2 bg-slate-50 border border-slate-200" onClick={exportApps}>
+                    <LuDownload size={14} /> Export CSV
+                  </button>
+                </div>
+              </div>
+              <div className="overflow-x-auto w-full">
+                <table className="w-full text-left text-sm text-slate-600 whitespace-nowrap">
+                  <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider font-bold border-b border-slate-100">
+                    <tr><th className="p-4 pl-6">ID</th><th className="p-4">Name</th><th className="p-4">Email</th><th className="p-4">Specialization</th><th className="p-4">License</th><th className="p-4">Status</th><th className="p-4 pr-6 text-right">Actions</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {apps.map(a => (
+                      <tr key={a.application_id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="p-4 pl-6 font-mono text-xs">{a.application_id}</td>
+                        <td className="p-4 font-semibold text-slate-800">{(a.first_name || '') + ' ' + (a.last_name || '')}</td>
+                        <td className="p-4">{a.email}</td>
+                        <td className="p-4">{a.specialization || '-'}</td>
+                        <td className="p-4 font-mono text-xs">{a.license_no || '-'}</td>
+                        <td className="p-4">
+                          <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${a.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : a.status === 'REJECTED' ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-amber-50 text-amber-600 border border-amber-200'}`}>{a.status}</span>
+                        </td>
+                        <td className="p-4 pr-6 text-right">
+                          {a.status === 'PENDING' && (
+                            <div className="flex items-center justify-end gap-2">
+                              <button className="p-1.5 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors border border-emerald-100" title="Approve" onClick={() => setConfirmAction({ open: true, id: a.application_id, what: 'approve' })}><LuCheck size={16} /></button>
+                              <button className="p-1.5 text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors border border-rose-100" title="Reject" onClick={() => setConfirmAction({ open: true, id: a.application_id, what: 'reject' })}><LuX size={16} /></button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {apps.length === 0 && <tr><td colSpan="7" className="p-8 text-center text-slate-400">No applications found.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+              <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between text-sm">
+                <div className="text-slate-500 font-medium pl-2">Page <span className="text-slate-900 font-bold">{appsPage}</span> of {appsMax}</div>
+                <div className="flex gap-2">
+                  <button className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" disabled={appsPage <= 1} onClick={() => loadApps(appsPage - 1)}><LuChevronLeft size={16} /></button>
+                  <button className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" disabled={appsPage >= appsMax} onClick={() => loadApps(appsPage + 1)}><LuChevronRight size={16} /></button>
+                </div>
+              </div>
+            </Card>
+          )}
 
-      {tab === 'doctors' && (
-        <div className="card">
-          <div className="row" style={{ justifyContent: 'space-between' }}>
-            <h3 className="text-lg font-semibold">Doctors</h3>
-            <div className="row" style={{ gap: 8 }}>
-              <input placeholder="Search name/email/specialization" value={docsQ} onChange={e => setDocsQ(e.target.value)} />
-              <button className="btn btn-primary btn-sm" onClick={async () => { await api.adminSyncDoctors(); await loadDocs(1); await refreshOverview() }}>Sync Doctors</button>
-            </div>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table>
-              <thead><tr><th>ID</th><th>User</th><th>Email</th><th>Specialization</th></tr></thead>
-              <tbody>
-                {docs.map(d => (
-                  <tr key={d.doctor_id}>
-                    <td>{d.doctor_id}</td>
-                    <td>{d.username}</td>
-                    <td>{d.email}</td>
-                    <td>{d.specialization || '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="row mt-2" style={{ justifyContent: 'space-between' }}>
-            <div className="muted">Page {docsPage} of {docsMax}</div>
-            <div className="row">
-              <button className="btn btn-secondary btn-sm" disabled={docsPage <= 1} onClick={() => loadDocs(docsPage - 1)}>Prev</button>
-              <button className="btn btn-secondary btn-sm" disabled={docsPage >= docsMax} onClick={() => loadDocs(docsPage + 1)}>Next</button>
-            </div>
-          </div>
-        </div>
-      )}
+          {/* Users Tab */}
+          {tab === 'users' && (
+            <Card className="overflow-hidden border border-slate-200/60 shadow-soft-md">
+              <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">Registered Users <span className="bg-primary-50 text-primary-600 text-xs px-2 py-0.5 rounded-full">{usersTotal}</span></h3>
+                  <p className="text-sm text-slate-500">Manage user accounts, roles, and platform access.</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <LuSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input className="input pl-9 w-full md:w-64 text-sm bg-slate-50" placeholder="Search username/email" value={usersQ} onChange={e => setUsersQ(e.target.value)} />
+                  </div>
+                  <select className="input text-sm bg-slate-50 font-medium cursor-pointer" value={usersRole} onChange={e => setUsersRole(e.target.value)}>
+                    <option value="">All Roles</option>
+                    <option value="ADMIN">Admin</option>
+                    <option value="DOCTOR">Doctor</option>
+                    <option value="PATIENT">Patient</option>
+                    <option value="PENDING_DOCTOR">Pending Doctor</option>
+                  </select>
+                </div>
+              </div>
+              <div className="overflow-x-auto w-full">
+                <table className="w-full text-left text-sm text-slate-600 whitespace-nowrap">
+                  <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider font-bold border-b border-slate-100">
+                    <tr><th className="p-4 pl-6">ID</th><th className="p-4">Username</th><th className="p-4">Email</th><th className="p-4">Role</th><th className="p-4 pr-6 text-right">Actions</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {users.map(u => (
+                      <tr key={u.user_id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="p-4 pl-6 font-mono text-xs">{u.user_id}</td>
+                        <td className="p-4 font-semibold text-slate-800">{u.username}</td>
+                        <td className="p-4">{u.email}</td>
+                        <td className="p-4">
+                          <span className="px-2 py-1 rounded-md text-[10px] bg-slate-100 text-slate-600 font-bold uppercase tracking-widest">{u.role}</span>
+                        </td>
+                        <td className="p-4 pr-6 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button className="px-3 py-1.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors" onClick={() => setSuspend({ open: true, user: u })}>{u.status === 'SUSPENDED' ? 'Unsuspend' : 'Suspend'}</button>
+                            <button className="px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-100 rounded-lg transition-colors flex items-center gap-1.5" onClick={() => setTerminate({ open: true, user: u, reason_code: 'REQUEST', reason_text: '' })}><LuBan size={12} />Terminate</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {users.length === 0 && <tr><td colSpan="5" className="p-8 text-center text-slate-400">No users found.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+              <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between text-sm">
+                <div className="text-slate-500 font-medium pl-2">Page <span className="text-slate-900 font-bold">{usersPage}</span> of {usersMax}</div>
+                <div className="flex gap-2">
+                  <button className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" disabled={usersPage <= 1} onClick={() => loadUsers(usersPage - 1)}><LuChevronLeft size={16} /></button>
+                  <button className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" disabled={usersPage >= usersMax} onClick={() => loadUsers(usersPage + 1)}><LuChevronRight size={16} /></button>
+                </div>
+              </div>
+            </Card>
+          )}
 
-      {tab === 'settings' && (
-        <div className="card">
-          <h3 className="text-lg font-semibold mb-2">System Settings</h3>
-          <form onSubmit={saveSettings} className="grid gap-3" style={{ gridTemplateColumns: '1fr 1fr' }}>
-            <div>
-              <label className="text-sm">LESION_MALIGNANT_THRESHOLD</label>
-              <input name="LESION_MALIGNANT_THRESHOLD" defaultValue={settings['LESION_MALIGNANT_THRESHOLD'] || ''} />
-            </div>
-            <div>
-              <label className="text-sm">JWT_LEEWAY_SECONDS</label>
-              <input name="JWT_LEEWAY_SECONDS" defaultValue={settings['JWT_LEEWAY_SECONDS'] || ''} />
-            </div>
-            <div>
-              <label className="text-sm">FRONTEND_ORIGINS</label>
-              <input name="FRONTEND_ORIGINS" defaultValue={settings['FRONTEND_ORIGINS'] || ''} />
-            </div>
-            <div className="col-span-2">
-              <button className="btn btn-primary" type="submit">Save</button>
-            </div>
-          </form>
-        </div>
-      )}
+          {/* Doctors Tab */}
+          {tab === 'doctors' && (
+            <Card className="overflow-hidden border border-slate-200/60 shadow-soft-md">
+              <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">Platform Doctors <span className="bg-primary-50 text-primary-600 text-xs px-2 py-0.5 rounded-full">{docsTotal}</span></h3>
+                  <p className="text-sm text-slate-500">View active doctors synchronized with the system.</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <LuSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input className="input pl-9 w-full md:w-64 text-sm bg-slate-50" placeholder="Search name/specialization" value={docsQ} onChange={e => setDocsQ(e.target.value)} />
+                  </div>
+                  <button className="btn-primary text-sm whitespace-nowrap px-4 py-2" onClick={async () => { await api.adminSyncDoctors(); await loadDocs(1); await refreshOverview(); push('Doctors synced successfully', 'success') }}>
+                    <LuRefreshCw size={14} /> Sync Doctors
+                  </button>
+                </div>
+              </div>
+              <div className="overflow-x-auto w-full">
+                <table className="w-full text-left text-sm text-slate-600 whitespace-nowrap">
+                  <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider font-bold border-b border-slate-100">
+                    <tr><th className="p-4 pl-6">Doc ID</th><th className="p-4">Username</th><th className="p-4">Email</th><th className="p-4 pr-6 text-right">Specialization</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {docs.map(d => (
+                      <tr key={d.doctor_id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="p-4 pl-6 font-mono text-xs">{d.doctor_id}</td>
+                        <td className="p-4 font-semibold text-slate-800">{d.username}</td>
+                        <td className="p-4">{d.email}</td>
+                        <td className="p-4 pr-6 text-right font-medium">{d.specialization || '-'}</td>
+                      </tr>
+                    ))}
+                    {docs.length === 0 && <tr><td colSpan="4" className="p-8 text-center text-slate-400">No doctors found.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+              <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between text-sm">
+                <div className="text-slate-500 font-medium pl-2">Page <span className="text-slate-900 font-bold">{docsPage}</span> of {docsMax}</div>
+                <div className="flex gap-2">
+                  <button className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" disabled={docsPage <= 1} onClick={() => loadDocs(docsPage - 1)}><LuChevronLeft size={16} /></button>
+                  <button className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" disabled={docsPage >= docsMax} onClick={() => loadDocs(docsPage + 1)}><LuChevronRight size={16} /></button>
+                </div>
+              </div>
+            </Card>
+          )}
 
-      {tab === 'audit' && (
-        <div className="card">
-          <div className="row" style={{ justifyContent: 'space-between' }}>
-            <h3 className="text-lg font-semibold">Audit Log</h3>
-            <div className="muted">Page {logsPage} of {logsMax} ({logsTotal} total)</div>
+          {/* Settings Tab */}
+          {tab === 'settings' && (
+            <Card className="max-w-3xl overflow-hidden border border-slate-200/60 shadow-soft-md" hover={false}>
+              <div className="p-6 border-b border-slate-100 bg-white">
+                <h3 className="text-lg font-bold text-slate-900">System Parameters</h3>
+                <p className="text-sm text-slate-500 mt-1">Configure global application variables stored securely in the database.</p>
+              </div>
+              <div className="p-6 bg-slate-50/30">
+                <form onSubmit={saveSettings} className="space-y-6">
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-1.5 block">Malignant Threshold</label>
+                      <input className="input w-full bg-white border-slate-200 focus:border-primary-500" name="LESION_MALIGNANT_THRESHOLD" defaultValue={settings['LESION_MALIGNANT_THRESHOLD'] || ''} placeholder="0.5" />
+                      <p className="text-[10px] text-slate-500 mt-1.5">Float value for model malignancy cutoff.</p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-1.5 block">JWT Leeway</label>
+                      <input className="input w-full bg-white border-slate-200 focus:border-primary-500" name="JWT_LEEWAY_SECONDS" defaultValue={settings['JWT_LEEWAY_SECONDS'] || ''} placeholder="300" />
+                      <p className="text-[10px] text-slate-500 mt-1.5">Seconds allowed for clock drift on tokens.</p>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-1.5 block">Frontend Origins</label>
+                      <input className="input w-full bg-white border-slate-200 focus:border-primary-500" name="FRONTEND_ORIGINS" defaultValue={settings['FRONTEND_ORIGINS'] || ''} placeholder="http://localhost:3000,https://app.com" />
+                      <p className="text-[10px] text-slate-500 mt-1.5">Comma-separated CORS origins.</p>
+                    </div>
+                  </div>
+                  <div className="pt-4 border-t border-slate-200/60 pb-2">
+                    <button className="btn-primary w-full md:w-auto px-8" type="submit">Save Configurations</button>
+                  </div>
+                </form>
+              </div>
+            </Card>
+          )}
+
+          {/* Audit Tab */}
+          {tab === 'audit' && (
+            <Card className="overflow-hidden border border-slate-200/60 shadow-soft-md">
+              <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">Audit Logs <span className="bg-primary-50 text-primary-600 text-xs px-2 py-0.5 rounded-full">{logsTotal}</span></h3>
+                  <p className="text-sm text-slate-500">Immutable trail of administrative and elevated actions.</p>
+                </div>
+              </div>
+              <div className="overflow-x-auto w-full max-h-[600px] overflow-y-auto">
+                <table className="w-full text-left text-sm text-slate-600 whitespace-nowrap">
+                  <thead className="sticky top-0 bg-slate-50 text-slate-400 text-xs uppercase tracking-wider font-bold border-b border-slate-200 z-10">
+                    <tr><th className="p-4 pl-6">Log ID</th><th className="p-4">User</th><th className="p-4">Action</th><th className="p-4">Meta</th><th className="p-4 pr-6 text-right">Timestamp</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {logs.map(r => (
+                      <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="p-4 pl-6 font-mono text-[10px] text-slate-400">{r.id}</td>
+                        <td className="p-4 font-mono text-xs text-primary-600">{r.user_id || '-'}</td>
+                        <td className="p-4 font-semibold text-slate-800">
+                          <span className="px-2.5 py-1 rounded bg-slate-100 text-[10px] uppercase font-bold tracking-widest">{r.action}</span>
+                        </td>
+                        <td className="p-4 text-xs font-mono text-slate-500 truncate max-w-[200px]" title={r.meta}>{r.meta || '-'}</td>
+                        <td className="p-4 pr-6 text-right text-xs text-slate-500">{new Date(r.created_at).toLocaleString([], { hour12: true, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</td>
+                      </tr>
+                    ))}
+                    {logs.length === 0 && <tr><td colSpan="5" className="p-8 text-center text-slate-400">No logs found.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-sm">
+                <div className="text-slate-500 font-medium pl-2">Page <span className="text-slate-900 font-bold">{logsPage}</span> of {logsMax}</div>
+                <div className="flex gap-2">
+                  <button className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" disabled={logsPage <= 1} onClick={() => loadLogs(logsPage - 1)}><LuChevronLeft size={16} /></button>
+                  <button className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" disabled={logsPage >= logsMax} onClick={() => loadLogs(logsPage + 1)}><LuChevronRight size={16} /></button>
+                </div>
+              </div>
+            </Card>
+          )}
+        </motion.div>
+      </AnimatePresence>
+
+      <ConfirmModal
+        open={confirmAction.open}
+        title={`${confirmAction.what === 'approve' ? 'Approve' : 'Reject'} Application?`}
+        onClose={() => setConfirmAction({ open: false, id: null, what: '' })}
+        onConfirm={() => act(confirmAction.id, confirmAction.what)}
+        confirmText={confirmAction.what === 'approve' ? 'Approve Doctor' : 'Reject Doctor'}
+      >
+        <div className="text-sm text-slate-600 leading-relaxed pt-2">Are you sure you want to <strong>{confirmAction.what}</strong> this doctor application? This action will be logged in the system audit trail and notify the user.</div>
+      </ConfirmModal>
+
+      <ConfirmModal open={suspend.open} title={suspend.user ? `${suspend?.user?.status === 'SUSPENDED' ? 'Unsuspend' : 'Suspend'} Account?` : ''} onClose={() => setSuspend({ open: false, user: null })} onConfirm={doSuspend} confirmText="Confirm">
+        <div className="text-sm text-slate-600 leading-relaxed pt-2">This will <strong>{suspend?.user?.status === 'SUSPENDED' ? 'reactivate' : 'temporarily block'}</strong> the account {suspend.user?.username}. Are you sure?</div>
+      </ConfirmModal>
+
+      <ConfirmModal open={terminate.open} title={terminate.user ? `Terminate ${terminate.user.username}?` : ''} onClose={() => setTerminate({ open: false, user: null, reason_code: 'REQUEST', reason_text: '' })} onConfirm={doTerminate} confirmText="Terminate Account">
+        <div className="grid gap-4 pt-2">
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1 block">Reason code</label>
+            <select className="input text-sm w-full bg-slate-50 border-slate-200" value={terminate.reason_code} onChange={e => setTerminate({ ...terminate, reason_code: e.target.value })}>
+              <option value="REQUEST">User Request</option>
+              <option value="ABUSE">Abuse/Violation</option>
+              <option value="FRAUD">Fraud</option>
+              <option value="OTHER">Other</option>
+            </select>
           </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table>
-              <thead><tr><th>ID</th><th>User</th><th>Action</th><th>Meta</th><th>When</th></tr></thead>
-              <tbody>
-                {logs.map(r => (
-                  <tr key={r.id}>
-                    <td>{r.id}</td>
-                    <td>{r.user_id || '-'}</td>
-                    <td>{r.action}</td>
-                    <td>{r.meta || ''}</td>
-                    <td>{new Date(r.created_at).toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1 block">Details (Optional)</label>
+            <input className="input text-sm w-full bg-slate-50 border-slate-200" value={terminate.reason_text} onChange={e => setTerminate({ ...terminate, reason_text: e.target.value })} placeholder="Add termination context" />
           </div>
-          <div className="row mt-2" style={{ justifyContent: 'space-between' }}>
-            <div />
-            <div className="row">
-              <button className="btn btn-secondary btn-sm" disabled={logsPage <= 1} onClick={() => loadLogs(logsPage - 1)}>Prev</button>
-              <button className="btn btn-secondary btn-sm" disabled={logsPage >= logsMax} onClick={() => loadLogs(logsPage + 1)}>Next</button>
-            </div>
+          <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-xl flex items-start gap-2">
+            <LuShield size={14} className="mt-0.5" />
+            <p>Appointments after today will be cancelled automatically. This destructive action is logged.</p>
           </div>
         </div>
-      )}
+      </ConfirmModal>
     </div>
   )
 }

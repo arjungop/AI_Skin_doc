@@ -103,8 +103,10 @@ def get_suggestions(
 # ── Public Weather Context ───────────────────────────────────────────────
 
 import time as _time
+import threading as _threading
 
 _weather_cache: dict = {}  # {city_lower: (timestamp, data)}
+_weather_lock = _threading.Lock()
 _CACHE_TTL = 300  # 5 minutes
 
 
@@ -118,11 +120,11 @@ def get_weather_context(city: str = "Coimbatore"):
     key = city.strip().lower()
     now = _time.time()
 
-    # Return cached result if fresh
-    if key in _weather_cache:
-        ts, cached = _weather_cache[key]
-        if now - ts < _CACHE_TTL:
-            return cached
+    with _weather_lock:
+        if key in _weather_cache:
+            ts, cached = _weather_cache[key]
+            if now - ts < _CACHE_TTL:
+                return cached
 
     from backend.ml.environment import env_adapter
     context = env_adapter.get_weather_context(city)
@@ -137,7 +139,8 @@ def get_weather_context(city: str = "Coimbatore"):
         "description": context.get("description", ""),
     }
 
-    _weather_cache[key] = (now, result)
+    with _weather_lock:
+        _weather_cache[key] = (now, result)
     return result
 
 

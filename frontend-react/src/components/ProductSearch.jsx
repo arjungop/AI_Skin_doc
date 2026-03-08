@@ -25,15 +25,50 @@ const PRODUCT_DB = [
     { id: 20, name: 'The Ordinary Vitamin C Suspension 23% + HA Spheres 2%', brand: 'The Ordinary', tags: ['serum', 'vitamin c', 'brightening', 'dark spots', 'antioxidant', 'glow'], category: 'Serum' },
 ];
 
+// Map user search terms to product categories for hard-filtering
+const CATEGORY_ALIASES = {
+    'cream': ['Moisturizer', 'Treatment'],
+    'moisturizer': ['Moisturizer'],
+    'moisturiser': ['Moisturizer'],
+    'lotion': ['Moisturizer'],
+    'cleanser': ['Cleanser'],
+    'wash': ['Cleanser'],
+    'serum': ['Serum'],
+    'exfoliant': ['Exfoliant'],
+    'peel': ['Exfoliant'],
+    'sunscreen': ['Sunscreen'],
+    'spf': ['Sunscreen'],
+    'sunblock': ['Sunscreen'],
+    'essence': ['Essence'],
+    'treatment': ['Treatment'],
+    'toner': ['Toner'],
+};
+
 function searchProducts(query) {
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-    const scored = PRODUCT_DB.map(p => {
+    // Separate category filter terms from ingredient/concern terms
+    let categoryFilter = null;
+    const searchTerms = [];
+    for (const t of terms) {
+        if (CATEGORY_ALIASES[t]) {
+            categoryFilter = CATEGORY_ALIASES[t];
+        } else {
+            searchTerms.push(t);
+        }
+    }
+    let pool = PRODUCT_DB;
+    // Hard-filter by category when user specifies a product type
+    if (categoryFilter) {
+        pool = pool.filter(p => categoryFilter.includes(p.category));
+    }
+    const scored = pool.map(p => {
         const searchable = [...p.tags, p.name.toLowerCase(), p.brand.toLowerCase(), p.category.toLowerCase()].join(' ');
+        const matchTerms = searchTerms.length > 0 ? searchTerms : terms;
         let hits = 0;
-        for (const t of terms) {
+        for (const t of matchTerms) {
             if (searchable.includes(t)) hits++;
         }
-        return { ...p, score: terms.length > 0 ? hits / terms.length : 0 };
+        return { ...p, score: matchTerms.length > 0 ? hits / matchTerms.length : (categoryFilter ? 0.5 : 0) };
     });
     return scored.filter(p => p.score > 0).sort((a, b) => b.score - a.score).slice(0, 5);
 }

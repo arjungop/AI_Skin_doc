@@ -36,24 +36,8 @@ export default function DoctorTreatmentPlans() {
     const fetchPatients = async () => {
         setLoading(true)
         try {
-            const [appts, patientList] = await Promise.all([
-                api.listAppointments(),
-                api.listPatients().catch(() => []),
-            ])
-            // Build name lookup from patient list
-            const nameMap = new Map()
-            for (const pt of patientList || []) {
-                if (pt.patient_id && pt.name) nameMap.set(pt.patient_id, pt.name)
-            }
-            // Build unique patient list from appointments
-            const m = new Map()
-            for (const a of appts || []) {
-                const e = m.get(a.patient_id) || { patient_id: a.patient_id, name: nameMap.get(a.patient_id) || '', visits: 0, lastVisit: null }
-                e.visits += 1
-                if (!e.lastVisit || new Date(a.appointment_date) > new Date(e.lastVisit)) e.lastVisit = a.appointment_date
-                m.set(a.patient_id, e)
-            }
-            setPatients(Array.from(m.values()).sort((a, b) => (b.lastVisit || '').localeCompare(a.lastVisit || '')))
+            const pts = await api.getDoctorPatients()
+            setPatients(pts || [])
         } catch (err) {
             console.error(err)
         } finally {

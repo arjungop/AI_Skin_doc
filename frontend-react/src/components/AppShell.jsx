@@ -11,7 +11,8 @@ import {
 } from 'react-icons/fa'
 import {
   LuScan, LuSparkles, LuUser, LuMessageCircle, LuMapPin,
-  LuHeart, LuX, LuUsers, LuCalendarClock, LuPill, LuSettings, LuClipboardList
+  LuX, LuUsers, LuCalendarClock, LuPill, LuSettings, LuClipboardList,
+  LuBrain
 } from 'react-icons/lu'
 
 export default function AppShell({ children }) {
@@ -60,14 +61,13 @@ export default function AppShell({ children }) {
     { to: '/admin', icon: FaHome, label: 'Overview' },
     { to: '/admin/transactions', icon: FaMoneyBillWave, label: 'Transactions' },
     { to: '/admin/users', icon: LuUsers, label: 'Users' },
-    'divider',
-    { to: '/messages', icon: FaEnvelope, label: 'Messages', badge: totalUnread },
   ] : role === 'DOCTOR' ? [
     { to: '/doctor', icon: FaHome, label: 'Dashboard' },
     { to: '/doctor/patients', icon: LuUsers, label: 'Patients' },
     { to: '/doctor/appointments', icon: FaCalendarAlt, label: 'Appointments' },
     { to: '/doctor/treatment-plans', icon: LuPill, label: 'Treatment Plans' },
     { to: '/doctor/availability', icon: LuCalendarClock, label: 'Availability' },
+    { to: '/chat', icon: LuMessageCircle, label: 'AI Chat', isAI: true },
     'divider',
     { to: '/messages', icon: FaEnvelope, label: 'Messages', badge: totalUnread },
     { to: '/doctor/transactions', icon: FaMoneyBillWave, label: 'Billing' },
@@ -77,7 +77,7 @@ export default function AppShell({ children }) {
     { to: '/lesions', icon: LuScan, label: 'AI Scan', isAI: true },
     { to: '/coach', icon: LuSparkles, label: 'Coach', isNew: true },
     { to: '/chat', icon: LuMessageCircle, label: 'AI Chat', isAI: true },
-    { to: '/journey', icon: LuHeart, label: 'Journey', isNew: true },
+    { to: '/agent', icon: LuBrain, label: 'AI Agent', isAI: true, isNew: true },
     { to: '/routine', icon: FaStethoscope, label: 'Treatment Plan' },
     { to: '/find-doctors', icon: LuMapPin, label: 'Doctors', isNew: true },
     'divider',
@@ -90,6 +90,7 @@ export default function AppShell({ children }) {
     { to: '/doctor', icon: FaHome, label: 'Home' },
     { to: '/doctor/patients', icon: LuUsers, label: 'Patients' },
     { to: '/doctor/appointments', icon: FaCalendarAlt, label: 'Appts' },
+    { to: '/chat', icon: LuMessageCircle, label: 'AI Chat', isAI: true },
     { to: '/messages', icon: FaEnvelope, label: 'Messages', badge: totalUnread },
   ] : [
     { to: '/dashboard', icon: FaHome, label: 'Home' },

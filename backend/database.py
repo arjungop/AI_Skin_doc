@@ -82,6 +82,27 @@ def run_simple_migrations():
             cols = [row[1] for row in res.fetchall()]
             if 'category' not in cols:
                 conn.exec_driver_sql("ALTER TABLE transactions ADD COLUMN category VARCHAR(30) DEFAULT 'general'")
+
+            res = conn.exec_driver_sql("PRAGMA table_info(appointments)")
+            cols = [row[1] for row in res.fetchall()]
+            if 'video_link' not in cols:
+                conn.exec_driver_sql("ALTER TABLE appointments ADD COLUMN video_link VARCHAR(500) DEFAULT NULL")
+
+            res = conn.exec_driver_sql("PRAGMA table_info(routine_items)")
+            cols = [row[1] for row in res.fetchall()]
+            if 'notes' not in cols:
+                conn.exec_driver_sql("ALTER TABLE routine_items ADD COLUMN notes TEXT DEFAULT NULL")
+            if 'brand' not in cols:
+                conn.exec_driver_sql("ALTER TABLE routine_items ADD COLUMN brand VARCHAR(255) DEFAULT NULL")
+
+            res = conn.exec_driver_sql("PRAGMA table_info(lesions)")
+            cols = [row[1] for row in res.fetchall()]
+            if 'confidence' not in cols:
+                conn.exec_driver_sql("ALTER TABLE lesions ADD COLUMN confidence FLOAT DEFAULT NULL")
+            if 'is_low_confidence' not in cols:
+                conn.exec_driver_sql("ALTER TABLE lesions ADD COLUMN is_low_confidence BOOLEAN DEFAULT NULL")
+            if 'entropy' not in cols:
+                conn.exec_driver_sql("ALTER TABLE lesions ADD COLUMN entropy FLOAT DEFAULT NULL")
     except Exception:
         # Non-fatal; keep app running
         pass

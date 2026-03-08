@@ -5,7 +5,8 @@ from backend import models, schemas
 from backend.azure_blob import upload_bytes_get_url
 import os
 import asyncio
-from backend.security import get_current_user
+from backend.security import get_current_user, verify_patient_access
+from backend.audit import log_phi_access
 from backend.inference import get_inference
 from io import BytesIO
 from PIL import Image, ImageStat, ImageFilter, ImageOps, ImageChops
@@ -42,24 +43,25 @@ async def predict_lesion(
 ):
     if patient_id is None:
         raise HTTPException(status_code=400, detail="patient_id is required")
-    # Patients can only upload for themselves
-    role = (user.role or "").upper()
-    if role != "ADMIN":
-        patient = db.query(models.Patient).filter(models.Patient.user_id == user.user_id).first()
-        if not patient or patient.patient_id != patient_id:
-            raise HTTPException(status_code=403, detail="Cannot upload for another patient")
+    # Row-level access control: patients own data, doctors must be linked
+    verify_patient_access(patient_id, user, db)
 
     # Read data once
     data = file.file.read()
 
-    # Strip EXIF metadata from uploaded images for privacy
+    # Load original pixels for ML inference BEFORE any re-encoding.
+    # EXIF stripping re-compresses JPEG at default quality (75%), which
+    # introduces artifacts that degrade classification accuracy.
+    img_for_inference = Image.open(BytesIO(data)).convert("RGB")
+
+    # Strip EXIF metadata from uploaded images for privacy (stored copy only)
     try:
         _img_exif = Image.open(BytesIO(data))
         _img_clean = Image.new(_img_exif.mode, _img_exif.size)
         _img_clean.putdata(list(_img_exif.getdata()))
         _buf = BytesIO()
         _fmt = _img_exif.format or "JPEG"
-        _img_clean.save(_buf, format=_fmt)
+        _img_clean.save(_buf, format=_fmt, quality=95)
         data = _buf.getvalue()
     except Exception:
         pass  # If stripping fails, continue with original data
@@ -113,8 +115,9 @@ async def predict_lesion(
 
     # Try learned model first if weights are present; fallback to heuristic
     use_model = False
+    pred: dict = {}
     try:
-        img = Image.open(BytesIO(data)).convert("RGB")
+        img = img_for_inference
         model_path = os.getenv("LESION_MODEL_WEIGHTS")
         use_model = model_path and os.path.exists(model_path)
         if use_model:
@@ -143,10 +146,9 @@ async def predict_lesion(
             thr = float(threshold) if isinstance(threshold, (int, float)) else (
                 0.35 if (isinstance(sensitivity, str) and sensitivity.lower() in {"high", "hi"}) else thr_env
             )
-            if use_thr:
-                prediction = 'malignant' if (risk >= thr or (pred.get('label') == 'malignant')) else 'benign'
-            else:
-                prediction = 'malignant' if (pred.get('label') == 'malignant') else 'benign'
+            # Store the actual 20-class label (e.g. "melanoma", "nevus")
+            # instead of collapsing to binary benign/malignant
+            prediction = pred.get("label", "unknown")
             explain_url = None  # Grad-CAM not yet implemented for ConvNeXt
         else:
             raise RuntimeError("no-weights")
@@ -250,18 +252,31 @@ async def predict_lesion(
     if use_blob:
         image_path = upload_bytes_get_url(data, file.filename, file.content_type)
 
-    new_lesion = models.Lesion(patient_id=patient_id, image_path=image_path, prediction=prediction)
+    db_conf = float(pred.get("probability", 0.0)) if use_model else None
+    db_low_conf = bool(pred.get("is_low_confidence", False)) if use_model else None
+    db_entropy = pred.get("entropy") if use_model else None
+
+    new_lesion = models.Lesion(
+        patient_id=patient_id, 
+        image_path=image_path, 
+        prediction=prediction,
+        confidence=db_conf,
+        is_low_confidence=db_low_conf,
+        entropy=db_entropy
+    )
     db.add(new_lesion)
     db.commit()
     db.refresh(new_lesion)
+    log_phi_access(db, user_id=user.user_id, patient_id=patient_id,
+                   action="lesion.predict", resource_type="lesion",
+                   resource_id=new_lesion.lesion_id,
+                   detail={"prediction": prediction, "confidence": db_conf})
     # Attach transient fields for the response schema (not stored in DB)
     new_lesion.risk_score  = float(risk)
     new_lesion.explain_url = explain_url if use_model else None
     if use_model:
-        new_lesion.confidence       = float(pred.get("probability", 0.0))
-        new_lesion.label            = pred.get("label")
-        new_lesion.is_low_confidence = bool(pred.get("is_low_confidence", False))
-        new_lesion.entropy          = pred.get("entropy")
+        # DB fields already populated, just add transient fields
+        new_lesion.label = pred.get("label")
         _all = pred.get("all_probs", {})
         new_lesion.top_probs = {
             k: round(v, 4)
@@ -270,36 +285,52 @@ async def predict_lesion(
     return new_lesion
 
 
-def _compose_report_text(prediction: str | None) -> tuple[str, str]:
+def _compose_report_text(prediction: str | None, p_malignant: float = 0.0) -> tuple[str, str]:
     p = (prediction or '').strip().lower()
-    if p == 'benign':
-        summary = "Benign lesion — no signs of cancer"
+    # Classes that require urgent clinical attention
+    CONCERNING_CLASSES = {"melanoma", "ak", "vasculitis", "bullous", "lupus", "systemic"}
+    # Escalate if ANY cancer-class probability exceeds 2%, even when not the top prediction.
+    # Melanoma is the highest-risk miss — a 2% signal in any position warrants clinical review.
+    is_concerning = p in CONCERNING_CLASSES or p == 'malignant' or p_malignant > 0.02
+
+    if is_concerning:
+        class_name = p.replace('_', ' ').title()
+        summary = f"Needs review — {class_name} detected"
         details = (
-            "Our system isn’t perfect and can sometimes make mistakes. If you notice anything unusual or have any concerns, it’s always a good idea to check with a dermatologist for peace of mind.\n"
-            "Good news. Based on the image and available context, the lesion appears benign. "
-            "Key indicators that support this: well-defined borders, uniform color, and a symmetrical shape.\n\n"
-            "What you can do next:\n"
-            "- Keep an eye on it: take a clear photo and compare monthly.\n"
-            "- Protect your skin: use sunscreen (SPF 30+) and avoid peak sun.\n"
-            "- Seek care if it changes: rapid growth, irregular borders, color changes, bleeding or itching.\n\n"
-            "We know skin concerns can be worrying. You did the right thing getting this checked. "
-            "If you’d like a dermatologist to review, choose a doctor and we’ll share this report with them."
-        )
-    else:
-        summary = "Needs review — features may be concerning"
-        details = (
-            "Our system isn’t perfect and can sometimes make mistakes. If you notice anything unusual or have any concerns, it’s always a good idea to check with a dermatologist for peace of mind.\n"            
+            "Our system isn’t perfect and can sometimes make mistakes. "
+            "If you notice anything unusual or have any concerns, "
+            "it’s always a good idea to check with a dermatologist for peace of mind.\n"
             "This lesion shows some features that warrant a closer look. "
-            "Possible indicators: irregular borders, asymmetry, or varied colors. This does NOT necessarily mean cancer, "
+            "Possible indicators: irregular borders, asymmetry, or varied colors. "
+            "This does NOT necessarily mean cancer, "
             "but it’s important to have a clinician examine it.\n\n"
             "What you should do next:\n"
             "- Arrange a dermatology review within 1–2 weeks.\n"
             "- Avoid further irritation (scratching, picking).\n"
             "- Take a clear photo for comparison before your visit.\n\n"
-            "We’re here to help: choose a doctor below and we can share this report with them to speed up your appointment."
+            "We’re here to help: choose a doctor below and we can share "
+            "this report with them to speed up your appointment."
+        )
+    else:
+        class_name = p.replace('_', ' ').title() if p and p != 'benign' else 'Benign lesion'
+        summary = f"{class_name} — no signs of cancer"
+        details = (
+            "Our system isn’t perfect and can sometimes make mistakes. "
+            "If you notice anything unusual or have any concerns, "
+            "it’s always a good idea to check with a dermatologist for peace of mind.\n"
+            "Good news. Based on the image and available context, the lesion appears benign. "
+            "Key indicators that support this: well-defined borders, uniform color, "
+            "and a symmetrical shape.\n\n"
+            "What you can do next:\n"
+            "- Keep an eye on it: take a clear photo and compare monthly.\n"
+            "- Protect your skin: use sunscreen (SPF 30+) and avoid peak sun.\n"
+            "- Seek care if it changes: rapid growth, irregular borders, "
+            "color changes, bleeding or itching.\n\n"
+            "We know skin concerns can be worrying. You did the right thing getting this checked. "
+            "If you’d like a dermatologist to review, choose a doctor "
+            "and we’ll share this report with them."
         )
     return summary, details
-
 
 @router.post("/{lesion_id}/report", response_model=schemas.DiagnosisReportOut)
 def create_report(
@@ -317,8 +348,8 @@ def create_report(
         pat = db.query(models.Patient).filter(models.Patient.user_id == user.user_id).first()
         if not pat or pat.patient_id != patient_id:
             raise HTTPException(status_code=403, detail="Forbidden")
-    # Compose details
-    summary, details = _compose_report_text(lesion.prediction)
+    # Compose details — pass cancer-class probability for safety escalation
+    summary, details = _compose_report_text(lesion.prediction, p_malignant=float(lesion.risk_score or 0.0))
     rep = models.DiagnosisReport(
         lesion_id=lesion_id,
         patient_id=patient_id,
@@ -330,6 +361,10 @@ def create_report(
     db.add(rep)
     db.commit()
     db.refresh(rep)
+    log_phi_access(db, user_id=user.user_id, patient_id=patient_id,
+                   action="report.create", resource_type="diagnosis_report",
+                   resource_id=rep.report_id,
+                   detail={"lesion_id": lesion_id})
     return rep
 
 
@@ -388,4 +423,8 @@ def send_report_to_doctor(
     )
     db.add(m)
     db.commit()
+    log_phi_access(db, user_id=user.user_id, patient_id=patient_id,
+                   action="report.send_to_doctor", resource_type="diagnosis_report",
+                   resource_id=rep.report_id,
+                   detail={"doctor_id": doctor_id, "room_id": room.room_id})
     return {"ok": True, "room_id": room.room_id, "message_id": m.message_id}

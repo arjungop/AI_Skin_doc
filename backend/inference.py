@@ -41,15 +41,14 @@ DEFAULT_IMG_SIZE = 384
 IMAGENET_MEAN    = [0.485, 0.456, 0.406]
 IMAGENET_STD     = [0.229, 0.224, 0.225]
 
-# Post-hoc logit bias: subtract from logits before softmax to correct
-# known training-data biases (clinical→smartphone domain gap).
-# Negative = penalise, Positive = boost.
-LOGIT_BIAS: dict[str, float] = {
-    "impetigo": -3.5,  # over-predicted on smartphone photos
-}
+# Post-hoc logit bias: all class boosts and penalties have been removed.
+# Boosts caused rare classes to beat correct predictions on every image.
+# The impetigo -3.5 penalty caused 0% impetigo accuracy (suppressed even
+# true impetigo images). Let the model's own probabilities decide.
+LOGIT_BIAS: dict[str, float] = {}
 
-# Temperature for softmax: T > 1 softens overconfident distributions.
-SOFTMAX_TEMPERATURE: float = 1.3
+# Temperature for softmax: T=1.0 (neutral) — model's raw probabilities.
+SOFTMAX_TEMPERATURE: float = 1.0
 
 # --------------------------------------------------------------------------- #
 #  Singleton cache                                                             #
@@ -202,31 +201,22 @@ class SkinInference:
     # ---------------------------------------------------------------------- #
     def _normalize_input(self, image: Image.Image) -> Image.Image:
         """
-        Normalise a real-world photo to more closely match clinical training data.
-
-        Training images were clinical close-ups: dark background, controlled
-        lighting, ~720×480.  Smartphone photos are bright, large, and noisy.
-        We apply a mild brightness/contrast correction so the model sees input
-        closer to its training distribution.
+        Minimal preprocessing: only clip genuinely overexposed photos (mean > 220).
+        Histogram equalization was removed — it destroys pigmentation intensity
+        information (dark patches on hyperpigmentation, melanoma, nevus) which is
+        the primary diagnostic signal for most skin conditions.
         """
-        import PIL.ImageOps as _IOps
         import PIL.ImageEnhance as _IE
+        from PIL import ImageStat as _IS
 
         rgb = image.convert("RGB")
 
-        # If the image is very bright (mean > 140/255), apply histogram
-        # equalisation per-channel to reduce blown-out highlights.
-        from PIL import ImageStat as _IS
+        # Only intervene when the image is truly blown out (> 220/255 mean).
+        # A mild contrast boost (1.1) slightly sharpens feature boundaries
+        # without altering the relative intensity distribution.
         mean_brightness = sum(_IS.Stat(rgb).mean) / 3.0
-        if mean_brightness > 140:
-            # Split and equalize each channel separately, then merge
-            r, g, b = rgb.split()
-            r = _IOps.equalize(r)
-            g = _IOps.equalize(g)
-            b = _IOps.equalize(b)
-            rgb = Image.merge("RGB", (r, g, b))
-            # Mild contrast boost to restore punch after equalization
-            rgb = _IE.Contrast(rgb).enhance(1.3)
+        if mean_brightness > 220:
+            rgb = _IE.Contrast(rgb).enhance(1.1)
 
         return rgb
 
@@ -249,15 +239,27 @@ class SkinInference:
                     "p_malignant": 0.0, "all_probs": {},
                     "entropy": 1.0, "is_low_confidence": True}
 
+        # Basic Test-Time Augmentation (TTA)
+        # We will create 3 views of the same image: Original, Horizontal Flip, Vertical Flip
+        
         image = self._normalize_input(image)
-        x = self.transform(image.convert("RGB")).unsqueeze(0).to(self.device)
+        orig_tensor = self.transform(image.convert("RGB")).to(self.device)
+        
+        # Create augmented versions
+        hf_tensor = T.functional.hflip(orig_tensor)
+        vf_tensor = T.functional.vflip(orig_tensor)
+        
+        # Stack into a mini-batch of size 3
+        x = torch.stack([orig_tensor, hf_tensor, vf_tensor])
 
         use_amp = self.device.type == "cuda"
         with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=use_amp):
-            logits = self.model(x)
+            logits_batch = self.model(x)
 
+        # Average the logits across the 3 TTA views
+        logits = logits_batch.mean(dim=0).float().cpu()
+        
         # Apply logit bias + temperature scaling
-        logits = logits.float().cpu()[0]
         logits = logits + self._logit_bias
         probs = F.softmax(logits / SOFTMAX_TEMPERATURE, dim=0)
 

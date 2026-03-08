@@ -32,6 +32,7 @@ from backend.routes.profile import router as profile_router
 from backend.routes.journey import router as journey_router
 from backend.routes.routine import router as routine_router
 from backend.routes.recommendations import router as recommendations_router
+from backend.routes.agent import router as agent_router
 from backend.security import require_roles
 
 # Create tables and run lightweight migrations for dev
@@ -80,6 +81,23 @@ app.add_middleware(
 )
 
 
+# HTTPS redirect middleware — active when FORCE_HTTPS=1 (behind TLS-terminating proxy)
+_force_https = os.getenv("FORCE_HTTPS", "").strip().lower() in ("1", "true", "yes")
+
+class HTTPSRedirectMiddleware(BaseHTTPMiddleware):
+    """Redirect HTTP → HTTPS in production.  Trusts X-Forwarded-Proto set by
+    the reverse-proxy / load-balancer."""
+    async def dispatch(self, request: Request, call_next):
+        proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+        if proto != "https":
+            from starlette.responses import RedirectResponse as _Redir
+            url = request.url.replace(scheme="https")
+            return _Redir(url=str(url), status_code=301)
+        return await call_next(request)
+
+if _force_https:
+    app.add_middleware(HTTPSRedirectMiddleware)
+
 # Security headers middleware (#14)
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -89,6 +107,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(self)"
+        if _force_https:
+            # 1 year HSTS with subdomains; protects against SSL-stripping
+            response.headers["Strict-Transport-Security"] = (
+                "max-age=31536000; includeSubDomains"
+            )
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)
@@ -152,6 +175,12 @@ try:
                 user.hashed_password = crud.hash_password(_admin_password)
                 user.role = "ADMIN"
                 db.commit()
+        # Admin exists — only update if credentials actually changed
+        elif any_admin.email != _admin_email or any_admin.username != _admin_username:
+            any_admin.username = _admin_username or any_admin.username
+            any_admin.email = _admin_email
+            any_admin.hashed_password = crud.hash_password(_admin_password)
+            db.commit()
         db.close()
 except Exception:
     pass
@@ -174,6 +203,7 @@ app.include_router(recommendations_router, prefix="/recommendations", tags=["rec
 app.include_router(profile_router, prefix="/profile", tags=["profile"])
 app.include_router(journey_router, prefix="/journey", tags=["journey"])
 app.include_router(routine_router, prefix="/routine", tags=["routine"])
+app.include_router(agent_router, prefix="/agent", tags=["agent"])
 
 # Root redirect to frontend
 from fastapi.responses import RedirectResponse
@@ -181,7 +211,8 @@ from fastapi.responses import RedirectResponse
 @app.get("/")
 def root():
     """Redirect root to frontend"""
-    return RedirectResponse(url="http://localhost:3000")
+    frontend_url = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
+    return RedirectResponse(url=frontend_url)
 
 # Serve built frontend if present (single-port mode)
 try:

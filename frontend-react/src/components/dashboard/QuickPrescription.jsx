@@ -1,6 +1,10 @@
 import { useState } from 'react'
 import { FaPlus, FaCheck } from 'react-icons/fa'
-import { Card, CardTitle } from '../Card'
+import { LuPlus, LuPill, LuChevronRight } from 'react-icons/lu'
+import { Card, CardTitle, CardDescription } from '../Card'
+import { Link } from 'react-router-dom'
+import { motion } from 'framer-motion'
+import React from 'react'
 
 export default function QuickPrescription() {
     const templates = [
@@ -11,43 +15,65 @@ export default function QuickPrescription() {
 
     const [selected, setSelected] = useState(null)
 
+    const containerVars = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.1 } } }
+    const itemVars = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }
+
     return (
-        <Card className="h-full p-6" hover={false}>
+        <Card className="h-full p-6 flex flex-col group/card" hover={false}>
             <div className="flex justify-between items-center mb-5">
-                <CardTitle>Quick Prescriptions</CardTitle>
-                <button className="h-8 w-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 hover:text-primary-500 hover:bg-primary-50 hover:border-primary-200 transition-all">
-                    <FaPlus size={12} />
-                </button>
+                <div>
+                    <CardTitle>Quick Scripts</CardTitle>
+                    <p className="text-xs text-slate-400 font-medium">Common templates</p>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-primary-400 group-hover/card:bg-primary-50 transition-colors">
+                    <LuPill size={14} />
+                </div>
             </div>
-            <div className="space-y-3">
+
+            <motion.div variants={containerVars} initial="hidden" animate="show" className="flex-1 space-y-2.5 overflow-y-auto min-h-0 custom-scrollbar pr-1 -mr-1 pb-2">
                 {templates.map(t => (
-                    <div
+                    // @ts-ignore
+                    <motion.div
                         key={t.id}
-                        className={`p-4 rounded-xl border cursor-pointer transition-all ${selected === t.id
-                            ? 'border-primary-300 bg-primary-50'
-                            : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-slate-100'
+                        variants={itemVars}
+                        className={`p-3 rounded-2xl cursor-pointer transition-all border group/item ${selected === t.id
+                            ? 'border-primary-200 bg-primary-50 shadow-sm'
+                            : 'border-slate-100 bg-white hover:border-slate-300 hover:shadow-sm'
                             }`}
                         onClick={() => setSelected(t.id)}
                     >
-                        <div className="flex justify-between items-center mb-1">
-                            <span className="font-semibold text-sm text-slate-900">{t.name}</span>
-                            {selected === t.id && <FaCheck className="text-primary-500" size={12} />}
+                        <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all ${selected === t.id
+                                    ? 'bg-primary-500 text-white shadow-md shadow-primary-500/30 scale-105'
+                                    : 'bg-slate-50 text-slate-400 group-hover/item:bg-slate-100'
+                                }`}>
+                                {selected === t.id ? <FaCheck size={14} /> : <span className="font-bold text-xs">{t.name.charAt(0)}</span>}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <div className={`font-bold text-sm truncate transition-colors ${selected === t.id ? 'text-primary-700' : 'text-slate-800'}`}>
+                                    {t.name}
+                                </div>
+                                <div className={`text-[11px] font-medium leading-tight mt-0.5 transition-colors ${selected === t.id ? 'text-primary-600/70' : 'text-slate-500 line-clamp-2'}`}>
+                                    {t.meds.join(', ')}
+                                </div>
+                            </div>
                         </div>
-                        <div className="text-xs text-slate-400 leading-relaxed">
-                            {t.meds.join(', ')}
-                        </div>
-                    </div>
+                    </motion.div>
                 ))}
+            </motion.div>
+
+            <div className="mt-5 pt-4 border-t border-slate-100">
+                <Link
+                    to="/doctor/treatment-plans"
+                    className={`w-full py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 group/btn shadow-sm ${selected
+                        ? 'bg-primary-600 hover:bg-primary-700 text-white hover:shadow-md'
+                        : 'bg-slate-900 hover:bg-slate-800 text-white hover:shadow-md'
+                        }`}
+                >
+                    {selected ? 'Use Template' : 'Manage Plans'}
+                    <LuChevronRight size={16} className={`transition-transform ${selected ? 'translate-x-1' : 'group-hover/btn:translate-x-1'}`} />
+                </Link>
             </div>
-            <button
-                className={`w-full mt-5 py-3 rounded-xl font-semibold text-sm transition-all ${selected
-                    ? 'btn-primary'
-                    : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
-                    }`}
-                disabled={!selected}
-            >
-                Apply to Current Patient
-            </button>
         </Card>
     )
 }

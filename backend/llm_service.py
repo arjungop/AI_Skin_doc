@@ -67,13 +67,9 @@ _SYSTEM_PROMPT = (
     "If a user asks something outside your scope, respond ONLY with:\n"
     "'I'm DermAI, specialised exclusively in dermatology and skin-related cosmetology. "
     "I can't help with that topic. Please ask me anything about skin conditions, skincare, or cosmetic procedures.'\n\n"
-    "FORMAT — for on-topic answers use Markdown:\n"
-    "1) **Summary** (2–3 sentences)\n"
-    "2) **Key Features / Symptoms** — bullet list (max 6)\n"
-    "3) **Red Flags** — bullet list (max 4)\n"
-    "4) **Skincare / Self-Care Tips** — bullet list (max 5)\n"
-    "5) **When to See a Dermatologist** — 1–3 bullets\n"
-    "6) **Disclaimer** — one sentence reminding the user this is educational and not a clinical diagnosis.\n"
+    "FORMAT — keep answers concise and conversational. For simple questions answer in 2–4 sentences. "
+    "For complex clinical questions use Markdown bullets. Always end with one short disclaimer sentence. "
+    "Never pad the answer with unnecessary sections — brevity is preferred.\n"
 )
 
 _DIAGNOSIS_SYSTEM_PROMPT = (
@@ -149,6 +145,7 @@ def _openrouter_chat(messages: List[Dict[str, str]]) -> str:
             model=model,
             messages=messages,
             temperature=float(os.getenv("LLM_TEMPERATURE", "0.2")),
+            max_tokens=int(os.getenv("LLM_MAX_TOKENS", "1500")),
             extra_headers={
                 "HTTP-Referer": os.getenv("FRONTEND_ORIGIN", "https://dermatriage.app"),
                 "X-Title": "DermAI - Dermatology Assistant",
@@ -176,6 +173,7 @@ def _openrouter_chat_stream(messages: List[Dict[str, str]]):
             model=model,
             messages=messages,
             temperature=float(os.getenv("LLM_TEMPERATURE", "0.2")),
+            max_tokens=int(os.getenv("LLM_MAX_TOKENS", "1500")),
             stream=True,
             extra_headers={
                 "HTTP-Referer": os.getenv("FRONTEND_ORIGIN", "https://dermatriage.app"),
@@ -228,7 +226,7 @@ def _gemini_chat(messages: List[Dict[str, str]]) -> str:
         # Configure generation parameters for fast responses
         generation_config = genai.types.GenerationConfig(
             temperature=float(os.getenv("LLM_TEMPERATURE", "0.1")),
-            max_output_tokens=1024,  # Faster responses with shorter limit
+            max_output_tokens=int(os.getenv("LLM_MAX_TOKENS", "1500")),
         )
         
         response = model.generate_content(
@@ -273,7 +271,7 @@ def _gemini_chat_stream(messages: List[Dict[str, str]]):
 
         generation_config = genai.types.GenerationConfig(
             temperature=float(os.getenv("LLM_TEMPERATURE", "0.1")),
-            max_output_tokens=1024,
+            max_output_tokens=int(os.getenv("LLM_MAX_TOKENS", "1500")),
         )
 
         response = model.generate_content(

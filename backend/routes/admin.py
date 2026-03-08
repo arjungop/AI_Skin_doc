@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from backend.database import get_db
 from backend import models
 from backend.security import require_roles
@@ -33,10 +33,15 @@ def list_doctor_applications(
         query = query.filter((U.username.ilike(like)) | (U.email.ilike(like)) | (models.DoctorApplication.first_name.ilike(like)) | (models.DoctorApplication.last_name.ilike(like)))
     total = query.count()
     apps = query.order_by(models.DoctorApplication.created_at.desc()).offset(max(0,(page-1)*page_size)).limit(page_size).all()
-    # Attach username/email
+    # Batch-fetch users to avoid N+1
+    user_ids = [a.user_id for a in apps]
+    users_map = {}
+    if user_ids:
+        users = db.query(models.User).filter(models.User.user_id.in_(user_ids)).all()
+        users_map = {u.user_id: u for u in users}
     out = []
     for a in apps:
-        user = db.query(models.User).filter(models.User.user_id == a.user_id).first()
+        user = users_map.get(a.user_id)
         out.append({
             "application_id": a.application_id,
             "user_id": a.user_id,
@@ -113,21 +118,20 @@ def approve_doctor_application(application_id: int, db: Session = Depends(get_db
 
 
 @router.post("/doctor_applications/{application_id}/reject")
-def reject_doctor_application(application_id: int, db: Session = Depends(get_db), user=Depends(require_roles("ADMIN"))):
+def reject_doctor_application(application_id: int, db: Session = Depends(get_db), admin_user=Depends(require_roles("ADMIN"))):
     app = db.query(models.DoctorApplication).filter(models.DoctorApplication.application_id == application_id).first()
     if not app:
         raise HTTPException(status_code=404, detail="Application not found")
+    if app.status == "REJECTED":
+        return {"message": "Already rejected"}
+    if app.status == "APPROVED":
+        raise HTTPException(status_code=400, detail="Cannot reject an already approved application")
     app.status = "REJECTED"
-    # Keep user role as PENDING_DOCTOR or set to USER
-    user = db.query(models.User).filter(models.User.user_id == app.user_id).first()
-    if user and user.role == "PENDING_DOCTOR":
-        user.role = "USER"
+    target_user = db.query(models.User).filter(models.User.user_id == app.user_id).first()
+    if target_user and target_user.role == "PENDING_DOCTOR":
+        target_user.role = "USER"
+    db.add(models.AuditLog(user_id=admin_user.user_id, action="REJECT_DOCTOR_APPLICATION", meta=str(application_id)))
     db.commit()
-    try:
-        db.add(models.AuditLog(user_id=user.user_id, action="REJECT_DOCTOR_APPLICATION", meta=str(application_id)))
-        db.commit()
-    except Exception:
-        db.rollback()
     return {"message": "Rejected"}
 
 

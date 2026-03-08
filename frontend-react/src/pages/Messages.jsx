@@ -24,6 +24,8 @@ export default function Messages() {
   const [isLoading, setIsLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sendError, setSendError] = useState('')
+  const [loadError, setLoadError] = useState('')
 
   // New conversation modal state
   const [showNewChat, setShowNewChat] = useState(false)
@@ -47,6 +49,12 @@ export default function Messages() {
   const currentUserId = parseInt(localStorage.getItem('user_id') || '0')
   const role = (localStorage.getItem('role') || '').toUpperCase()
 
+  // Reset mountedRef on every mount (survives React 18 StrictMode unmount/remount)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+
   // Keep activeRoomRef in sync
   useEffect(() => { activeRoomRef.current = activeRoom }, [activeRoom])
 
@@ -54,8 +62,14 @@ export default function Messages() {
   const loadRooms = useCallback(async () => {
     try {
       const data = await api.listRooms()
-      if (mountedRef.current) setRooms(data)
-    } catch (err) { console.error('loadRooms error:', err) }
+      if (mountedRef.current) {
+        setRooms(Array.isArray(data) ? data : [])
+        setLoadError('')
+      }
+    } catch (err) {
+      console.error('loadRooms error:', err)
+      if (mountedRef.current) setLoadError(err.message || 'Failed to load conversations')
+    }
   }, [])
 
   useEffect(() => {
@@ -65,7 +79,7 @@ export default function Messages() {
 
   // ── Heartbeat for online status ─────────────────────────────────────
   useEffect(() => {
-    const beat = () => { try { api.sendHeartbeat() } catch {} }
+    const beat = () => { try { api.sendHeartbeat() } catch { } }
     beat() // initial
     heartbeatRef.current = setInterval(beat, HEARTBEAT_INTERVAL)
     // Mark offline on page unload using synchronous XHR (sendBeacon can't carry auth headers)
@@ -79,13 +93,13 @@ export default function Messages() {
           xhr.setRequestHeader('Authorization', `Bearer ${token}`)
           xhr.send()
         }
-      } catch {}
+      } catch { }
     }
     window.addEventListener('beforeunload', handleUnload)
     return () => {
       clearInterval(heartbeatRef.current)
       window.removeEventListener('beforeunload', handleUnload)
-      try { api.goOffline() } catch {}
+      try { api.goOffline() } catch { }
     }
   }, [])
 
@@ -103,7 +117,7 @@ export default function Messages() {
         try {
           const s = await api.getOnlineStatus(uid)
           statuses[uid] = s
-        } catch {}
+        } catch { }
       })
     )
     if (mountedRef.current) setOnlineUsers(prev => ({ ...prev, ...statuses }))
@@ -132,7 +146,7 @@ export default function Messages() {
         setMessages(prev =>
           prev.map(m =>
             m.sender_user_id === currentUserId
-              ? { ...m, status: 'READ' }
+              ? { ...m, status: 'read' }
               : m
           )
         )
@@ -181,7 +195,6 @@ export default function Messages() {
 
   useEffect(() => {
     return () => {
-      mountedRef.current = false
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
       clearTimeout(typingTimeoutRef.current)
     }
@@ -197,7 +210,7 @@ export default function Messages() {
     setActiveRoom(room)
     await loadMessages(room.room_id)
     // Mark messages as read
-    try { await api.markRoomRead(room.room_id) } catch {}
+    try { await api.markRoomRead(room.room_id) } catch { }
     // Refresh room list to clear unread badge
     loadRooms()
     startPolling(room.room_id)
@@ -209,6 +222,7 @@ export default function Messages() {
     e.preventDefault()
     if (!messageText.trim() || !activeRoom) return
 
+    setSendError('')
     try {
       const newMsg = await api.postMessage(activeRoom.room_id, {
         content: messageText.trim(),
@@ -218,17 +232,23 @@ export default function Messages() {
       setMessageText('')
       setIsUrgent(false)
       loadRooms()
-    } catch (err) { console.error(err) }
+      // Re-fetch from DB to ensure consistent state
+      loadMessages(activeRoom.room_id)
+    } catch (err) {
+      console.error(err)
+      setSendError(err.message || 'Failed to send message. Please try again.')
+    }
   }
 
   // ── Typing indicator sender ─────────────────────────────────────────
   const handleInputChange = (e) => {
     setMessageText(e.target.value)
+    if (sendError) setSendError('')
     if (!activeRoom) return
     const now = Date.now()
     if (now - lastTypingSentRef.current > TYPING_DEBOUNCE) {
       lastTypingSentRef.current = now
-      try { api.sendTyping(activeRoom.room_id) } catch {}
+      try { api.sendTyping(activeRoom.room_id) } catch { }
     }
   }
 
@@ -249,7 +269,8 @@ export default function Messages() {
       return `Dr. ${room.doctor.first_name || room.doctor.username}`
     }
     if (role === 'DOCTOR' && room.patient) {
-      return `${room.patient.first_name} ${room.patient.last_name}`.trim()
+      const name = `${room.patient.first_name || ''} ${room.patient.last_name || ''}`.trim()
+      return name || room.patient.username || 'Patient'
     }
     if (role === 'ADMIN') {
       const patientName = room.patient ? `${room.patient.first_name} ${room.patient.last_name}`.trim() : 'Patient'
@@ -284,9 +305,10 @@ export default function Messages() {
 
   // ── Message status icon ─────────────────────────────────────────────
   const MessageStatusIcon = ({ status }) => {
-    if (status === 'READ') return <LuCheckCheck size={12} className="text-blue-400" />
-    if (status === 'DELIVERED') return <LuCheckCheck size={12} />
-    return <LuCheck size={12} />  // SENT
+    const s = (status || '').toLowerCase()
+    if (s === 'read') return <LuCheckCheck size={12} className="text-blue-400" />
+    if (s === 'delivered') return <LuCheckCheck size={12} />
+    return <LuCheck size={12} />  // sent
   }
 
   // ── New conversation helpers ───────────────────────────────────────
@@ -324,13 +346,17 @@ export default function Messages() {
   }
 
   const getContactName = (c) => {
-    if (role === 'DOCTOR') return `${c.first_name || ''} ${c.last_name || ''}`.trim() || c.email || 'Patient'
+    if (role === 'DOCTOR') return `${c.first_name || ''} ${c.last_name || ''}`.trim() || c.username || c.email || 'Patient'
     return `Dr. ${c.user?.username || c.username || 'Unknown'}`
   }
 
   const filteredContacts = contacts.filter(c => {
     if (!contactSearch.trim()) return true
-    return getContactName(c).toLowerCase().includes(contactSearch.toLowerCase())
+    const term = contactSearch.toLowerCase()
+    const nameMatch = getContactName(c).toLowerCase().includes(term)
+    const usernameMatch = (c.username || '').toLowerCase().includes(term)
+    const emailMatch = (c.email || '').toLowerCase().includes(term)
+    return nameMatch || usernameMatch || emailMatch
   })
 
   // ── Filtered rooms ─────────────────────────────────────────────────
@@ -383,6 +409,11 @@ export default function Messages() {
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {isLoading ? (
             <div className="flex justify-center p-4"><LuLoader className="animate-spin text-slate-400" /></div>
+          ) : loadError ? (
+            <div className="text-center p-4 text-sm">
+              <p className="text-rose-500 mb-2">{loadError}</p>
+              <button onClick={() => { setLoadError(''); setIsLoading(true); loadRooms().finally(() => setIsLoading(false)) }} className="text-primary-500 underline text-xs">Retry</button>
+            </div>
           ) : filteredRooms.length === 0 ? (
             <div className="text-center text-slate-400 p-4 text-sm">No conversations yet</div>
           ) : (
@@ -473,23 +504,7 @@ export default function Messages() {
               </div>
 
               <div className="flex items-center gap-2">
-                {/* Video link button */}
-                {activeRoom.video_link ? (
-                  <a
-                    href={activeRoom.video_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-xs font-semibold hover:bg-emerald-100 transition-colors"
-                  >
-                    <LuVideo size={14} />
-                    Join Video
-                    <LuExternalLink size={12} />
-                  </a>
-                ) : (
-                  <button className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors" title="No video link set">
-                    <LuVideo size={20} />
-                  </button>
-                )}
+                {/* Video link removed from here and moved to Appointments page */}
               </div>
             </div>
 
@@ -497,6 +512,21 @@ export default function Messages() {
             <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50">
               {messages.map((msg, i) => {
                 const isMe = msg.sender_user_id === currentUserId
+                const isSystem = msg.message_type === 'system'
+
+                if (isSystem) {
+                  return (
+                    <div key={msg.message_id || i} className="flex justify-center my-6">
+                      <div className="bg-slate-100/80 backdrop-blur-sm text-slate-600 border border-slate-200 text-xs px-4 py-2.5 rounded-2xl flex items-start sm:items-center gap-3 max-w-[85%] text-left sm:text-center shadow-sm">
+                        {msg.is_urgent && <LuTriangleAlert className="text-rose-500 shrink-0 mt-0.5 sm:mt-0" size={16} />}
+                        <span className={`whitespace-pre-wrap leading-relaxed ${msg.is_urgent ? "text-rose-700 font-medium" : ""}`}>
+                          {msg.content}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                }
+
                 return (
                   <motion.div
                     key={msg.message_id || i}
@@ -549,6 +579,12 @@ export default function Messages() {
 
             {/* Input */}
             <div className="p-4 bg-white border-t border-slate-100">
+              {sendError && (
+                <div className="mb-2 px-3 py-2 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center gap-2">
+                  <LuTriangleAlert size={12} className="shrink-0" />
+                  {sendError}
+                </div>
+              )}
               <form onSubmit={sendMessage} className="flex gap-3 items-end">
                 {/* Urgent toggle */}
                 <button

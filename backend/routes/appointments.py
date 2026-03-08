@@ -106,9 +106,24 @@ def create_appointment(
 
 @router.get("/", response_model=list[schemas.AppointmentOut])
 @router.get("", response_model=list[schemas.AppointmentOut])
-def get_appointments(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+def get_appointments(
+    status: str | None = None,
+    date: str | None = None,
+    db: Session = Depends(get_db), 
+    user: models.User = Depends(get_current_user)
+):
     role = (user.role or "").upper()
     q = db.query(models.Appointment)
+
+    if status:
+        q = q.filter(models.Appointment.status == status)
+    if date:
+        try:
+            day_start = datetime.strptime(date, "%Y-%m-%d")
+            day_end = day_start + timedelta(days=1)
+            q = q.filter(models.Appointment.appointment_date >= day_start, models.Appointment.appointment_date < day_end)
+        except ValueError:
+            pass
     if role == "ADMIN":
         return q.all()
     if role == "DOCTOR":
@@ -127,6 +142,18 @@ class AppointmentStatusUpdate(BaseModel):
     status: str
 
 
+# Map short action names from the frontend to canonical status values
+_STATUS_ALIASES = {
+    "confirm": "Confirmed",
+    "complete": "Completed",
+    "cancel": "Cancelled",
+    "schedule": "Scheduled",
+}
+
+# Minimum hours before appointment that a patient can cancel
+_PATIENT_CANCEL_CUTOFF_HOURS = 2
+
+
 @router.patch("/{appointment_id}/status", response_model=schemas.AppointmentOut)
 def update_status(
     appointment_id: int,
@@ -138,13 +165,20 @@ def update_status(
     if not app:
         raise HTTPException(status_code=404, detail="Appointment not found")
 
-    new_status = (body.status or "").capitalize()
+    raw = (body.status or "").strip()
+    new_status = _STATUS_ALIASES.get(raw.lower(), raw.capitalize())
     if new_status not in {"Scheduled", "Confirmed", "Completed", "Cancelled"}:
         raise HTTPException(status_code=400, detail="Invalid status")
 
-    role = (user.role or "").upper()
+    # Block transitions on already-terminal statuses
+    if app.status in {"Completed", "Cancelled"}:
+        raise HTTPException(status_code=400, detail=f"Appointment is already {app.status.lower()} and cannot be changed")
 
-    # Authorization and simple transition rules
+    role = (user.role or "").upper()
+    now = datetime.utcnow()
+    is_past = app.appointment_date < now
+
+    # Authorization and transition rules
     if role == "ADMIN":
         app.status = new_status
     elif role == "DOCTOR":
@@ -152,7 +186,19 @@ def update_status(
         if not doctor or doctor.doctor_id != app.doctor_id:
             raise HTTPException(status_code=403, detail="Not your appointment")
         if new_status == "Confirmed" and app.status == "Scheduled":
+            if is_past:
+                raise HTTPException(status_code=400, detail="Cannot confirm a past appointment")
             app.status = new_status
+            
+            # Establish DoctorPatient relationship
+            doc_pat = db.query(models.DoctorPatient).filter(
+                models.DoctorPatient.patient_id == app.patient_id,
+                models.DoctorPatient.doctor_id == app.doctor_id,
+            ).first()
+            if not doc_pat:
+                doc_pat = models.DoctorPatient(patient_id=app.patient_id, doctor_id=app.doctor_id)
+                db.add(doc_pat)
+
             # Auto-create chat room for doctor-patient pair if not exists
             exists = db.query(models.ChatRoom).filter(
                 models.ChatRoom.patient_id == app.patient_id,
@@ -161,17 +207,24 @@ def update_status(
             if not exists:
                 room = models.ChatRoom(patient_id=app.patient_id, doctor_id=app.doctor_id)
                 db.add(room)
-        elif new_status == "Completed" and app.status in {"Scheduled", "Confirmed"}:
+        elif new_status == "Completed" and app.status == "Confirmed":
             app.status = new_status
         elif new_status == "Cancelled" and app.status in {"Scheduled", "Confirmed"}:
             app.status = new_status
         else:
+            if new_status == "Completed" and app.status == "Scheduled":
+                raise HTTPException(status_code=400, detail="Please confirm the appointment before marking it as completed")
             raise HTTPException(status_code=400, detail="Invalid transition for doctor")
     else:  # PATIENT
         patient = db.query(models.Patient).filter(models.Patient.user_id == user.user_id).first()
         if not patient or patient.patient_id != app.patient_id:
             raise HTTPException(status_code=403, detail="Not your appointment")
         if new_status == "Cancelled" and app.status in {"Scheduled", "Confirmed"}:
+            if is_past:
+                raise HTTPException(status_code=400, detail="Cannot cancel a past appointment")
+            hours_until = (app.appointment_date - now).total_seconds() / 3600
+            if hours_until < _PATIENT_CANCEL_CUTOFF_HOURS:
+                raise HTTPException(status_code=400, detail=f"Cannot cancel within {_PATIENT_CANCEL_CUTOFF_HOURS} hours of the appointment. Please contact your doctor.")
             app.status = new_status
         else:
             raise HTTPException(status_code=400, detail="Invalid transition for patient")
@@ -195,3 +248,25 @@ def update_status(
     except Exception:
         pass
     return app
+
+
+@router.put("/{appointment_id}/video-link")
+def set_video_link(
+    appointment_id: int,
+    body: schemas.VideoLinkUpdate,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_roles("DOCTOR", "ADMIN")),
+):
+    app = db.query(models.Appointment).filter(models.Appointment.appointment_id == appointment_id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+        
+    role = (user.role or "").upper()
+    if role == "DOCTOR":
+        doc = db.query(models.Doctor).filter(models.Doctor.user_id == user.user_id).first()
+        if not doc or doc.doctor_id != app.doctor_id:
+            raise HTTPException(status_code=403, detail="Not your appointment")
+            
+    app.video_link = body.video_link
+    db.commit()
+    return {"ok": True, "video_link": app.video_link}
