@@ -706,13 +706,13 @@ def main():
     optimizer = optim.AdamW(trainable_params, lr=cfg.lr,
                             weight_decay=cfg.weight_decay)
 
-    # Cosine schedule with linear warmup
-    total_steps  = cfg.epochs * len(train_loader)
-    warmup_steps = cfg.warmup_epochs * len(train_loader)
-    def lr_lambda(step):
-        if step < warmup_steps:
-            return step / max(1, warmup_steps)
-        progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
+    # Cosine schedule with linear warmup — stepped once per epoch
+    total_steps  = cfg.epochs          # one step per epoch
+    warmup_steps = cfg.warmup_epochs   # epochs in warmup
+    def lr_lambda(epoch):
+        if epoch < warmup_steps:
+            return (epoch + 1) / max(1, warmup_steps)
+        progress = (epoch - warmup_steps) / max(1, total_steps - warmup_steps)
         return cfg.min_lr / cfg.lr + 0.5 * (1 - cfg.min_lr / cfg.lr) * (
             1 + np.cos(np.pi * progress)
         )
