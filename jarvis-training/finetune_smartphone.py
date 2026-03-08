@@ -570,7 +570,7 @@ def evaluate(model, loader, device) -> float:
     return 100.0 * correct / max(1, total)
 
 
-def train_one_epoch(model, loader, criterion, optimizer, scaler, device, epoch, total_epochs):
+def train_one_epoch(model, loader, criterion, optimizer, scaler, device, epoch, total_epochs, ema=None):
     model.train()
     total_loss = correct = total = 0
     bar = tqdm(loader, desc=f"Epoch {epoch+1}/{total_epochs}", leave=False)
@@ -588,6 +588,8 @@ def train_one_epoch(model, loader, criterion, optimizer, scaler, device, epoch, 
         )
         scaler.step(optimizer)
         scaler.update()
+        if ema is not None:
+            ema.update(model)  # per-batch EMA update
         total_loss += loss.item() * len(labels)
         correct    += (logits.argmax(1) == labels).sum().item()
         total      += len(labels)
@@ -757,9 +759,8 @@ def main():
 
     for epoch in range(start_epoch, cfg.epochs):
         loss, train_acc = train_one_epoch(
-            model, train_loader, criterion, optimizer, scaler, device, epoch, cfg.epochs
+            model, train_loader, criterion, optimizer, scaler, device, epoch, cfg.epochs, ema
         )
-        ema.update(model)
         scheduler.step()
 
         # Validate with EMA weights
