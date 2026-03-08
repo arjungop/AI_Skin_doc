@@ -53,9 +53,10 @@ echo ""
 EPOCHS="${EPOCHS:-15}"
 
 # Auto-resume if a previous run was interrupted
+RESUME_PATH="$(dirname "$OUTPUT")/resume.pth"
 RESUME_FLAG=""
-if [ -f "$(dirname "$OUTPUT")/resume.pth" ] || [ -f "checkpoints/resume.pth" ]; then
-  echo "Found resume.pth — resuming interrupted run (use: rm checkpoints/resume.pth to start fresh)"
+if [ -f "$RESUME_PATH" ]; then
+  echo "Found resume.pth — resuming interrupted run (use: rm $RESUME_PATH to start fresh)"
   RESUME_FLAG="--resume"
 fi
 
