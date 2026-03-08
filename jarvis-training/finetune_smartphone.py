@@ -153,7 +153,7 @@ class FinetuneConfig:
     weight_decay: float = 0.01
     warmup_epochs: int = 2
     grad_clip: float = 1.0
-    ema_decay: float = 0.9995
+    ema_decay: float = 0.99        # lower than pre-training (0.9995) — fine-tuning has far fewer steps
     drop_rate: float = 0.4
     drop_path_rate: float = 0.3
     num_workers: int = 4
@@ -615,6 +615,8 @@ def main():
                         help="Resume from checkpoints/resume.pth if it exists")
     parser.add_argument("--num-workers", type=int,  default=4,
                         help="DataLoader workers (auto-set to 0 on MPS)")
+    parser.add_argument("--ema-decay",  type=float, default=0.99,
+                        help="EMA decay (default 0.99 for fine-tuning; use 0.9995 for full training)")
     parser.add_argument("--unfreeze-stages", type=int, nargs="+", default=[2, 3],
                         choices=[0, 1, 2, 3],
                         help="ConvNeXt stage indices to unfreeze (0-3). Default: 2 3")
@@ -630,6 +632,7 @@ def main():
         checkpoint=args.checkpoint,
         num_workers=args.num_workers,
         unfreeze_stages=tuple(args.unfreeze_stages),
+        ema_decay=args.ema_decay,
     )
 
     # ── Device ──
